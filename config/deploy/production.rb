@@ -11,6 +11,11 @@ set :branch, :rails
 set :stage, :production
 set :rails_env, :production
 
+set :puma_bind, 'tcp://0.0.0.0:3000'
+set :puma_threads, [4, 16]
+set :puma_workers, 0
+set :puma_init_active_record, true
+
 
 
 # role-based syntax

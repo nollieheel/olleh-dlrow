@@ -1,3 +1,3 @@
-# README
+# Rails
 
-Various test repos.
+A hello world rails app.
