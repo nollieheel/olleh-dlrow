@@ -2,7 +2,8 @@
 lock "~> 3.11.0"
 
 set :application, "olleh-dlrow"
-set :repo_url, "git@github.com:nollieheel/olleh-dlrow.git"
+#set :repo_url, "git@github.com:nollieheel/olleh-dlrow.git"
+set :repo_url, "https://github.com/nollieheel/olleh-dlrow.git"
 
 # Default branch is :master
 # ask :branch, `git rev-parse --abbrev-ref HEAD`.chomp
