@@ -2,7 +2,6 @@
 lock "~> 3.11.0"
 
 set :application, "olleh-dlrow"
-#set :repo_url, "git@github.com:nollieheel/olleh-dlrow.git"
 set :repo_url, "https://github.com/nollieheel/olleh-dlrow.git"
 
 # Default branch is :master
@@ -28,7 +27,7 @@ set :copy_exclude, [ '.git' ]
 # append :linked_files, "config/database.yml"
 
 # Default value for linked_dirs is []
-# append :linked_dirs, "log", "tmp/pids", "tmp/cache", "tmp/sockets", "public/system"
+append :linked_dirs, "log", "tmp/pids", "tmp/cache", "tmp/sockets", "public/system"
 
 # Default value for default_env is {}
 # NOTE: set this in config/deploy/{env}.rb
