@@ -52,6 +52,7 @@ group :development do
   gem 'capistrano-rails', '~> 1.4.0'
   gem 'capistrano-bundler', '~> 1.3.0'
   gem 'capistrano3-puma', '~> 3.1.1'
+  gem 'capistrano-linked-files', '~> 1.2.0'
 end
 
 group :test do
