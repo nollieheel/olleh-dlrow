@@ -17,7 +17,6 @@ set :puma_workers, 0
 set :puma_init_active_record, true
 
 set :default_env, { path: '/opt/ruby_build/builds/2.5.1/bin:$PATH' }
-#set :linked_files, fetch(:linked_files, []).push('.env.production')
 set :linked_files, fetch(:linked_files, []).push('config/master.key')
 
 
@@ -55,7 +54,7 @@ set :linked_files, fetch(:linked_files, []).push('config/master.key')
 # Global options
 # --------------
 set :ssh_options, {
-  keys: %w(~/.ssh/selfkey.pem),
+  keys: %w(~/.ssh/self.pem),
   forward_agent: true,
   user: fetch(:user),
   auth_methods: %w(publickey)
