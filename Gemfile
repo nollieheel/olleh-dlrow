@@ -27,6 +27,8 @@ gem 'jbuilder', '~> 2.5'
 # Use ActiveModel has_secure_password
 # gem 'bcrypt', '~> 3.1.7'
 
+gem 'sidekiq', '~> 5.0'
+
 # Use ActiveStorage variant
 # gem 'mini_magick', '~> 4.8'
 
@@ -53,6 +55,7 @@ group :development do
   gem 'capistrano-bundler', '~> 1.3.0'
   gem 'capistrano3-puma', '~> 3.1.1'
   gem 'capistrano-linked-files', '~> 1.2.0'
+  gem 'capistrano-sidekiq', '~> 1.0.2'
 end
 
 group :test do

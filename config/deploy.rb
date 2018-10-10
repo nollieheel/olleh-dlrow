@@ -13,6 +13,8 @@ set :user, 'ubuntu'
 set :deploy_via, 'remote_cache'
 set :copy_exclude, [ '.git' ]
 
+set :sidekiq_config, "#{current_path}/config/sidekiq.yml"
+
 # Default value for :format is :airbrussh.
 # set :format, :airbrussh
 
