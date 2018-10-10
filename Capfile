@@ -32,6 +32,7 @@ install_plugin Capistrano::SCM::Git
 require "capistrano/bundler"
 require "capistrano/rails"
 require "capistrano/linked_files"
+require "capistrano/sidekiq"
 
 # require "capistrano/rails/assets"
 # require "capistrano/rails/migrations"
