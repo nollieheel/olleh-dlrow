@@ -17,7 +17,7 @@ set :puma_workers, 0
 set :puma_init_active_record, true
 
 set :default_env, { path: '/opt/ruby_build/builds/2.5.1/bin:$PATH' }
-set :linked_files, fetch(:linked_files, []).push('config/master.key')
+set :linked_files, fetch(:linked_files, []).push('config/master.key').push('.env.production')
 
 
 
