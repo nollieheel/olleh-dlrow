@@ -7,7 +7,7 @@
 # server "example.com", user: "deploy", roles: %w{app web}, other_property: :other_value
 # server "db.example.com", user: "deploy", roles: %w{db}
 server 'localhost', user: fetch(:user), roles: %w{ web app db }, primary: true
-set :branch, :dockerize
+set :branch, :rails
 set :stage, :production
 set :rails_env, :production
 
