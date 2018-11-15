@@ -1,16 +1,18 @@
 # Rails
 
-A hello world rails app.
+A Dockerized hello world rails app.
 
-### config/master.key:
+## Docker
 
-$ tail -1 notes > config/master.key
+```
+$ docker build -t hello .
+$ docker run -e MESSAGE=whatever -d -p 8080:3000 hello
+```
 
-### .env.production:
+Runs the app (Puma) by default. To run Sidekiq, instead:
 
-export MESSAGE=whatever
+```
+$ docker run -e REDIS_URL=redis://some.where:6379 -d hello /bin/bash docker/start.sh sidekiq
+```
 
-## Deploy
-
-$ bundle exec cap production linked_files:upload_files
-$ bundle exec cap production deploy
+Note: Sidekiq requires Redis, which is not included in the Docker image.
