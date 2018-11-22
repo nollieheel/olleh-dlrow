@@ -1,39 +1,32 @@
 #!/bin/bash
 #
+# A simple task starter for Puma and Sidekiq.
+# This script should ONLY be used as a task starter in a Docker container.
+#
 # Depends on docker image: starefossen/ruby-node:2-8
 #
-# A simple task switcher between Puma and Sidekiq.
+# Usage:
+# Start the container with CMD:
+#    /bin/bash docker/start.sh
 #
-# To use Puma, start the container with COMMAND:
-#    /bin/bash docker/start.sh puma
-#
-# To use Sidekiq, start the container with COMMAND:
+# To also run Sidekiq, start the container with CMD:
 #    /bin/bash docker/start.sh sidekiq
+#
+# Any other argument will be ignored.
 
 
 if [ "$1" = "sidekiq" ]; then
-    task=sidekiq
-else
-    task=puma
+    echo start script running Sidekiq server
+
+    for (( x=SIDEKIQ_WORKERS ; x > 0 ; x-- )); do
+        /usr/local/bin/bundle exec sidekiq \
+            --index "$x" --environment "$RUBY_ENV" \
+            --config "$SIDEKIQ_CONF" \
+            --pidfile "tmp/pids/sidekiq-${x}.pid" \
+            --logfile log/sidekiq.log --daemon
+    done
 fi
 
-echo Task is "$task"
+echo start script running Puma server
 
-case "$task" in
-    puma)
-        /usr/local/bin/bundle exec puma -C "$PUMA_CONF"
-        ;;
-    sidekiq)
-        for (( x=SIDEKIQ_WORKERS ; x > 0 ; x-- )); do
-            /usr/local/bin/bundle exec sidekiq \
-                --index "$x" --environment "$RUBY_ENV" \
-                --config "$SIDEKIQ_CONF" \
-                --pidfile "tmp/pids/sidekiq-${x}.pid" \
-                --logfile log/sidekiq.log --daemon
-        done
-        tail -f log/sidekiq.log
-        ;;
-    *)
-        echo No task specified
-        exit 1
-esac
+/usr/local/bin/bundle exec puma -C "$PUMA_CONF"
