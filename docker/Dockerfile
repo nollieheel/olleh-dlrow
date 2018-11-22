@@ -37,4 +37,6 @@ RUN sed -e "s;\[WORK_DIR\];${WORK_DIR};g" \
     && bundle exec rake assets:precompile \
     && bundle exec rake db:migrate
 
-CMD ["/bin/bash", "docker/start.sh", "puma"]
+CMD ["/bin/bash", "docker/start.sh"]
+# To run Sidekiq also, use:
+#CMD ["/bin/bash", "docker/start.sh", "sidekiq"]

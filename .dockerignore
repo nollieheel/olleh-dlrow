@@ -16,3 +16,4 @@ spec
 client
 public/system
 markup
+config/master.key
