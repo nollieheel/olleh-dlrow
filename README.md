@@ -1,3 +1,3 @@
 # README
 
-Various test repos.
+Example project from [Spring Initializr](https://start.spring.io/).
