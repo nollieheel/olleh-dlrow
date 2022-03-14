@@ -1,5 +1,5 @@
 # Build the JAR
-FROM amazoncorretto:16.0.2-alpine as builder
+FROM amazoncorretto:17.0.2-alpine3.15 as builder
 ARG HDIR=/home/spring
 RUN addgroup -S spring && adduser -S spring -G spring
 
@@ -11,7 +11,7 @@ COPY --chown=spring:spring . ./
 RUN ./gradlew build --no-daemon
 
 # Run the JAR
-FROM amazoncorretto:16.0.2-alpine
+FROM amazoncorretto:17.0.2-alpine3.15
 ARG HDIR=/home/spring
 RUN addgroup -S spring && adduser -S spring -G spring
 
