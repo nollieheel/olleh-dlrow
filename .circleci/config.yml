@@ -1,10 +1,21 @@
 version: 2.1
 orbs:
   aws-ecr: circleci/aws-ecr@7.3.0
+  aws-ecs: circleci/aws-ecs@2.2.1
 
 workflows:
-  build_and_push:
+  build_push_deploy:
     jobs:
       - aws-ecr/build-and-push-image:
           repo: nes
           tag: ${CIRCLE_BUILD_NUM},latest
+          filters:
+            branches:
+              only: kotlin-docker
+      - aws-ecs/deploy-service-update:
+          cluster-name: nes-prod
+          family: nes-test
+          service-name: test
+          force-new-deployment: true
+          requires:
+            - aws-ecr/build-and-push-image
