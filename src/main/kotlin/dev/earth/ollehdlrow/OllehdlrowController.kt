@@ -8,6 +8,6 @@ class HelloWorldController {
 
     @RequestMapping("/")
     fun home(): String {
-        return "Hello, dlrow!"
+        return "Hello, world!"
     }
 }
