@@ -19,8 +19,6 @@ workflows:
           family: nes-test
           skip-task-definition-registration: true
           type: approval
-          requires:
-            - aws-ecr/build-and-push-image
           filters:
             branches:
               only: kotlin-docker
