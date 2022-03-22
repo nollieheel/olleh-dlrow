@@ -12,13 +12,18 @@ workflows:
           filters:
             branches:
               only: kotlin-docker
+      - wait:
+          type: approval
+          requires:
+            - aws-ecr/build-and-push-image
       - aws-ecs/deploy-service-update:
           cluster-name: nes-prod
           service-name: test
           force-new-deployment: true
           family: nes-test
           skip-task-definition-registration: true
-          type: approval
+          requires:
+            - wait
           filters:
             branches:
               only: kotlin-docker
