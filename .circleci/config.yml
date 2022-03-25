@@ -15,12 +15,27 @@ jobs:
       # do aws stuff here
       - aws-ecr/build-and-push-image:
           setup-remote-docker: true
+          remote-docker-layer-caching: true
           repo: nes
           tag: ${CIRCLE_BUILD_NUM},latest
+  test-vars:
+    docker:
+      - image: cimg/python:3.9
+    steps:
+      - run:
+          name: "Save an env var"
+          command: echo 'export LATEST_TAG=3' >> $BASH_ENV
+      - run:
+          name: "Load an env var"
+          command: echo Latest tag is ${LATEST_TAG}
 
 workflows:
   build_push_deploy:
     jobs:
+      - test-vars:
+          filters:
+            branches:
+              only: kotlin-docker
       - build-and-push:
           filters:
             branches:

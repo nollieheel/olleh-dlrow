@@ -8,6 +8,6 @@ class HelloWorldController {
 
     @RequestMapping("/")
     fun home(): String {
-        return "Convert build-and-push-image to config job"
+        return "Enable docker layer caching"
     }
 }
