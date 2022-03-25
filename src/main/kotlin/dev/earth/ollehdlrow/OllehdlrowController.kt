@@ -8,6 +8,6 @@ class HelloWorldController {
 
     @RequestMapping("/")
     fun home(): String {
-        return "Olleh, dlrow!"
+        return "Convert build-and-push-image to config job"
     }
 }

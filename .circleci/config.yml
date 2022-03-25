@@ -1,14 +1,27 @@
 version: 2.1
+
 orbs:
+  aws-cli: circleci/aws-cli@2.1.0
   aws-ecr: circleci/aws-ecr@7.3.0
   aws-ecs: circleci/aws-ecs@2.2.1
+
+jobs:
+  build-and-push:
+    docker:
+      - image: cimg/python:3.9
+    steps:
+      - checkout
+      - aws-cli/setup
+      # do aws stuff here
+      - aws-ecr/build-and-push-image:
+          setup-remote-docker: true
+          repo: nes
+          tag: ${CIRCLE_BUILD_NUM},latest
 
 workflows:
   build_push_deploy:
     jobs:
-      - aws-ecr/build-and-push-image:
-          repo: nes
-          tag: ${CIRCLE_BUILD_NUM},latest
+      - build-and-push:
           filters:
             branches:
               only: kotlin-docker
