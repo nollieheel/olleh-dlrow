@@ -28,7 +28,7 @@ workflows:
       - wait:
           type: approval
           requires:
-            - aws-ecr/build-and-push-image
+            - build-and-push
       - aws-ecs/deploy-service-update:
           cluster-name: nes-prod
           service-name: test
