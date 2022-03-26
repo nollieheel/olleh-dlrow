@@ -65,13 +65,13 @@ workflows:
           filters:
             branches:
               only: kotlin-docker
-      - wait:
+      - for-approval:
           type: approval
           requires:
             - build-and-push
       - deploy-service:
           requires:
-            - wait
+            - for-approval
           filters:
             branches:
               only: kotlin-docker
