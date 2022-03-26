@@ -33,7 +33,7 @@ jobs:
       - aws-ecr/build-and-push-image:
           setup-remote-docker: true
           remote-docker-layer-caching: true
-          repo: nes
+          repo: ${AWS_ECR_REPO_NAME}
           tag: ${NEW_IMAGE_TAG},latest
   deploy-service:
     docker:
@@ -73,7 +73,6 @@ jobs:
             aws elbv2 modify-rule --rule-arn ${AWS_RULE_ARN_OLD} --actions Type=forward,TargetGroupArn=${AWS_TGROUP_ARN_BRIDGE}
             aws elbv2 modify-rule --rule-arn ${AWS_RULE_ARN_LIVE} --actions Type=forward,TargetGroupArn=${LIVE_TGROUP}
             aws elbv2 modify-rule --rule-arn ${AWS_RULE_ARN_OLD} --actions Type=forward,TargetGroupArn=${OLD_TGROUP}
-
   test-job:
     docker:
       - image: cimg/python:3.9
