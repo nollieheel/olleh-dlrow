@@ -8,6 +8,6 @@ class HelloWorldController {
 
     @RequestMapping("/")
     fun home(): String {
-        return "Fix image tagging"
+        return "Create new task def version on every deploy"
     }
 }

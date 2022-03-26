@@ -11,7 +11,6 @@ jobs:
     docker:
       - image: cimg/python:3.9
     steps:
-      - checkout
       - aws-cli/setup
       - jq/install:
           version: jq-1.6
@@ -54,9 +53,10 @@ workflows:
       - aws-ecs/deploy-service-update:
           cluster-name: ${AWS_ECS_CLUSTER_NAME}
           service-name: ${AWS_ECS_SERVICE_NAME}
-          family: ${AWS_ECS_TASK_DEF_FAMILY}
-          skip-task-definition-registration: true
-          force-new-deployment: true
+          family: ${AWS_TASK_DEF_FAMILY}
+          container-image-name-updates: 'container=${AWS_TASK_DEF_CONTAINER},tag=${NEW_IMAGE_TAG}'
+          task-definition-tags: 'key=CreatedBy,value=CircleCI'
+          verify-revision-is-deployed: true
           requires:
             - wait
           filters:
