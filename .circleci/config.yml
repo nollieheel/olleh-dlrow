@@ -30,7 +30,7 @@ jobs:
       - run:
           name: "Get latest number tag and increment it"
           command: |
-            aws ecr describe-images --repository-name ${AWS_ECR_REPO_NAME} --images-ids imageTag=latest | jq -r '.imageDetails[0]'
+            aws ecr describe-images --repository-name ${AWS_ECR_REPO_NAME} --image-ids imageTag=latest | jq -r '.imageDetails[0]'
       - run:
           name: "Save an env var"
           command: echo 'export LATEST_TAG=3' >> $BASH_ENV
