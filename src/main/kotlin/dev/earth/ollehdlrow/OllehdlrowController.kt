@@ -8,6 +8,6 @@ class HelloWorldController {
 
     @RequestMapping("/")
     fun home(): String {
-        return "Create new task def version on every deploy"
+        return "Test reusable command"
     }
 }

@@ -30,25 +30,23 @@ jobs:
             tag=$((LATEST_IMAGE_TAG + 1))
             echo New image tag will be ${tag}
             echo "export NEW_IMAGE_TAG=${tag}" >> $BASH_ENV
-      - run: echo Build the image and tag it ${NEW_IMAGE_TAG}
-#      - aws-ecr/build-and-push-image:
-#          setup-remote-docker: true
-#          remote-docker-layer-caching: true
-#          repo: nes
-#          tag: ${NEW_IMAGE_TAG},latest
+      - aws-ecr/build-and-push-image:
+          setup-remote-docker: true
+          remote-docker-layer-caching: true
+          repo: nes
+          tag: ${NEW_IMAGE_TAG},latest
   deploy-service:
     docker:
       - image: cimg/python:3.9
     steps:
       - get-latest-image-tag
-      - run: echo Deploy the cluster with tag ${LATEST_IMAGE_TAG}
-#      - aws-ecs/update-service:
-#          cluster-name: ${AWS_ECS_CLUSTER_NAME}
-#          service-name: ${AWS_ECS_SERVICE_NAME}
-#          family: ${AWS_TASK_DEF_FAMILY}
-#          container-image-name-updates: 'container=${AWS_TASK_DEF_CONTAINER},tag=${LATEST_IMAGE_TAG}'
-#          task-definition-tags: 'key=CreatedBy,value=CircleCI'
-#          verify-revision-is-deployed: true
+      - aws-ecs/update-service:
+          cluster-name: ${AWS_ECS_CLUSTER_NAME}
+          service-name: ${AWS_ECS_SERVICE_NAME}
+          family: ${AWS_TASK_DEF_FAMILY}
+          container-image-name-updates: 'container=${AWS_TASK_DEF_CONTAINER},tag=${LATEST_IMAGE_TAG}'
+          task-definition-tags: 'key=CreatedBy,value=CircleCI'
+          verify-revision-is-deployed: true
   test-vars:
     docker:
       - image: cimg/python:3.9
@@ -59,21 +57,21 @@ jobs:
 workflows:
   build_push_deploy:
     jobs:
-      - test-vars:
-          filters:
-            branches:
-              only: kotlin-docker
+#      - test-vars:
+#          filters:
+#            branches:
+#              only: kotlin-docker
       - build-and-push:
           filters:
             branches:
               only: kotlin-docker
-#      - wait:
-#          type: approval
-#          requires:
-#            - build-and-push
-#      - deploy-service:
-#          requires:
-#            - wait
-#          filters:
-#            branches:
-#              only: kotlin-docker
+      - wait:
+          type: approval
+          requires:
+            - build-and-push
+      - deploy-service:
+          requires:
+            - wait
+          filters:
+            branches:
+              only: kotlin-docker
