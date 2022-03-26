@@ -9,6 +9,7 @@ orbs:
 commands:
   aws-setup:
     description: "Install awscli and jq"
+    steps:
       - aws-cli/setup
       - jq/install:
           version: jq-1.6
