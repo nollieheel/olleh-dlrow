@@ -59,21 +59,27 @@ jobs:
     steps:
       - aws-setup
       - run:
-          name: "Get designation for old app version"
+          name: "Ready deploy variables"
           command: |
             tgroup_old=$(aws elbv2 describe-rules --rule-arns ${AWS_RULE_ARN_OLD} | jq -r '.Rules[0].Actions[0].TargetGroupArn')
-            echo Old app is associated with target group ${tgroup_old}
 
             if [[ "$tgroup_old" == "$AWS_TGROUP_ARN_1" ]]; then
-              tgroup_old_num=1
+              echo "export DEPLOY_SERVICE=${AWS_ECS_SERVICE_1}" >> $BASH_ENV
+              echo "export LIVE_TGROUP=${AWS_TGROUP_ARN_1}" >> $BASH_ENV
+              echo "export OLD_TGROUP=${AWS_TGROUP_ARN_2}" >> $BASH_ENV
             elif [[ "$tgroup_old" == "$AWS_TGROUP_ARN_2" ]]; then
-              tgroup_old_num=2
+              echo "export DEPLOY_SERVICE=${AWS_ECS_SERVICE_2}" >> $BASH_ENV
+              echo "export LIVE_TGROUP=${AWS_TGROUP_ARN_2}" >> $BASH_ENV
+              echo "export OLD_TGROUP=${AWS_TGROUP_ARN_1}" >> $BASH_ENV
             else
-              >&2 echo "None-live ALB is currently not associated with either target groups"
+              >&2 echo "Old (non-live) ALB listener rule is currently not associated with either target groups"
             fi
-
-            echo App will be deployed to service designation ${tgroup_old_num}
-            echo "export DESIGNATION_OLD=${tgroup_old_num}" >> $BASH_ENV
+      - run:
+          name: "Echo deploy variables"
+          command: |
+            echo App will be deployed to service ${DEPLOY_SERVICE}
+            echo Live ALB will be associated with tgroup ${LIVE_TGROUP}
+            echo Non-live ALB will be associated with tgroup ${OLD_TGROUP}
 
 workflows:
   build_push_deploy:
