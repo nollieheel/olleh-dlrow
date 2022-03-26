@@ -30,13 +30,15 @@ jobs:
       - run:
           name: "Get latest number tag and increment it"
           command: |
-            aws ecr describe-images --repository-name ${AWS_ECR_REPO_NAME} --image-ids imageTag=latest | jq -r '.imageDetails[0]'
+            tag1=$(aws ecr describe-images --repository-name ${AWS_ECR_REPO_NAME} --image-ids imageTag=latest | jq -r '.imageDetails[0].imageTags | map(select(. != "latest"))[0]')
+            tag2=$((tag1 + 1))
+            echo "export NEW_IMAGE_TAG=${tag2}" >> $BASH_ENV
       - run:
           name: "Save an env var"
           command: echo 'export LATEST_TAG=3' >> $BASH_ENV
       - run:
           name: "Load an env var"
-          command: echo Latest tag is ${LATEST_TAG}
+          command: echo New image tag is ${NEW_IMAGE_TAG}
       # test success
 
 workflows:
