@@ -7,15 +7,12 @@ orbs:
   jq: circleci/jq@2.2.0
 
 commands:
-  aws-setup:
-    description: "Install awscli and jq"
+  get-latest-image-tag:
+    description: "Get the number tag of the image currently marked as latest"
     steps:
       - aws-cli/setup
       - jq/install:
           version: jq-1.6
-  get-latest-image-tag:
-    description: "Get the number tag of the image currently marked as latest"
-    steps:
       - run: |
           tag=$(aws ecr describe-images --repository-name ${AWS_ECR_REPO_NAME} --image-ids imageTag=latest | jq -r '.imageDetails[0].imageTags | map(select(. != "latest"))[0]')
           echo Latest image tag is ${tag}
@@ -26,7 +23,6 @@ jobs:
     docker:
       - image: cimg/python:3.9
     steps:
-      - aws-setup
       - get-latest-image-tag
       - run:
           name: "Increment latest image tag"
@@ -43,21 +39,7 @@ jobs:
     docker:
       - image: cimg/python:3.9
     steps:
-      - aws-setup
       - get-latest-image-tag
-      - aws-ecs/update-service:
-          cluster-name: ${AWS_ECS_CLUSTER_NAME}
-          service-name: ${AWS_ECS_SERVICE_1}
-          family: ${AWS_TASK_DEF_FAMILY}
-          container-image-name-updates: 'container=${AWS_TASK_DEF_CONTAINER},tag=${LATEST_IMAGE_TAG}'
-          task-definition-tags: 'key=CreatedBy,value=CircleCI'
-          verify-revision-is-deployed: true
-
-  test-job:
-    docker:
-      - image: cimg/python:3.9
-    steps:
-      - aws-setup
       - run:
           name: "Ready deploy variables"
           command: |
@@ -78,6 +60,13 @@ jobs:
             fi
 
             echo App will be deployed to service designation ${tgroup_old_num}
+      - aws-ecs/update-service:
+          cluster-name: ${AWS_ECS_CLUSTER_NAME}
+          service-name: ${DEPLOY_SERVICE}
+          family: ${AWS_TASK_DEF_FAMILY}
+          container-image-name-updates: 'container=${AWS_TASK_DEF_CONTAINER},tag=${LATEST_IMAGE_TAG}'
+          task-definition-tags: 'key=CreatedBy,value=CircleCI'
+          verify-revision-is-deployed: true
       - run:
           name: "Toggle target group associations"
           command: |
@@ -85,24 +74,34 @@ jobs:
             aws elbv2 modify-rule --rule-arn ${AWS_RULE_ARN_LIVE} --actions Type=forward,TargetGroupArn=${LIVE_TGROUP}
             aws elbv2 modify-rule --rule-arn ${AWS_RULE_ARN_OLD} --actions Type=forward,TargetGroupArn=${OLD_TGROUP}
 
+  test-job:
+    docker:
+      - image: cimg/python:3.9
+    steps:
+      - aws-setup
+      - run:
+          name: "A test"
+          command: |
+            echo hello
+
 workflows:
   build_push_deploy:
     jobs:
-      - test-job:
+#      - test-job:
+#          filters:
+#            branches:
+#              only: kotlin-docker
+      - build-and-push:
           filters:
             branches:
               only: kotlin-docker
-#      - build-and-push:
-#          filters:
-#            branches:
-#              only: kotlin-docker
-#      - for-approval:
-#          type: approval
-#          requires:
-#            - build-and-push
-#      - deploy-service:
-#          requires:
-#            - for-approval
-#          filters:
-#            branches:
-#              only: kotlin-docker
+      - for-approval:
+          type: approval
+          requires:
+            - build-and-push
+      - deploy-service:
+          requires:
+            - for-approval
+          filters:
+            branches:
+              only: kotlin-docker
