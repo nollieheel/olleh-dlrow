@@ -13,12 +13,20 @@ jobs:
     steps:
       - checkout
       - aws-cli/setup
-      # do aws stuff here
+      - jq/install:
+          version: jq-1.6
+      - run:
+          name: "Get latest number tag and increment it"
+          command: |
+            tag1=$(aws ecr describe-images --repository-name ${AWS_ECR_REPO_NAME} --image-ids imageTag=latest | jq -r '.imageDetails[0].imageTags | map(select(. != "latest"))[0]')
+            tag2=$((tag1 + 1))
+            echo New image tag will be ${tag2}
+            echo "export NEW_IMAGE_TAG=${tag2}" >> $BASH_ENV
       - aws-ecr/build-and-push-image:
           setup-remote-docker: true
           remote-docker-layer-caching: true
           repo: nes
-          tag: ${CIRCLE_BUILD_NUM},latest
+          tag: ${NEW_IMAGE_TAG},latest
   test-vars:
     docker:
       - image: cimg/python:3.9
@@ -27,43 +35,30 @@ jobs:
       - aws-cli/setup
       - jq/install:
           version: jq-1.6
-      - run:
-          name: "Get latest number tag and increment it"
-          command: |
-            tag1=$(aws ecr describe-images --repository-name ${AWS_ECR_REPO_NAME} --image-ids imageTag=latest | jq -r '.imageDetails[0].imageTags | map(select(. != "latest"))[0]')
-            tag2=$((tag1 + 1))
-            echo "export NEW_IMAGE_TAG=${tag2}" >> $BASH_ENV
-      - run:
-          name: "Save an env var"
-          command: echo 'export LATEST_TAG=3' >> $BASH_ENV
-      - run:
-          name: "Load an env var"
-          command: echo New image tag is ${NEW_IMAGE_TAG}
-      # test success
 
 workflows:
   build_push_deploy:
     jobs:
-      - test-vars:
+#      - test-vars:
+#          filters:
+#            branches:
+#              only: kotlin-docker
+      - build-and-push:
           filters:
             branches:
               only: kotlin-docker
-#      - build-and-push:
-#          filters:
-#            branches:
-#              only: kotlin-docker
-#      - wait:
-#          type: approval
-#          requires:
-#            - build-and-push
-#      - aws-ecs/deploy-service-update:
-#          cluster-name: nes-prod
-#          service-name: test
-#          force-new-deployment: true
-#          family: nes-test
-#          skip-task-definition-registration: true
-#          requires:
-#            - wait
-#          filters:
-#            branches:
-#              only: kotlin-docker
+      - wait:
+          type: approval
+          requires:
+            - build-and-push
+      - aws-ecs/deploy-service-update:
+          cluster-name: ${AWS_ECS_CLUSTER_NAME}
+          service-name: ${AWS_ECS_SERVICE_NAME}
+          family: ${AWS_ECS_TASK_DEF_FAMILY}
+          skip-task-definition-registration: true
+          force-new-deployment: true
+          requires:
+            - wait
+          filters:
+            branches:
+              only: kotlin-docker

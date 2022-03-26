@@ -8,6 +8,6 @@ class HelloWorldController {
 
     @RequestMapping("/")
     fun home(): String {
-        return "Enable docker layer caching"
+        return "Fix image tagging"
     }
 }
