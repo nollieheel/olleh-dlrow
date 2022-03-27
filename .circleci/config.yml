@@ -96,32 +96,32 @@ jobs:
     docker:
       - image: cimg/python:3.9
     steps:
-      - do-nothing
+      - run: echo nothing
 
 workflows:
   build_push_deploy:
     jobs:
-#      - test-job:
+      - test-job:
+          filters:
+            branches:
+              only: kotlin-docker
+#      - build-and-push:
 #          filters:
 #            branches:
 #              only: kotlin-docker
-      - build-and-push:
-          filters:
-            branches:
-              only: kotlin-docker
-      - deploy-service:
-          requires:
-            - build-and-push
-          filters:
-            branches:
-              only: kotlin-docker
-      - for-approval:
-          type: approval
-          requires:
-            - deploy-service
-      - toggle-target-groups:
-          requires:
-            - for-approval
-          filters:
-            branches:
-              only: kotlin-docker
+#      - deploy-service:
+#          requires:
+#            - build-and-push
+#          filters:
+#            branches:
+#              only: kotlin-docker
+#      - switch-to-live-now:
+#          type: approval
+#          requires:
+#            - deploy-service
+#      - toggle-target-groups:
+#          requires:
+#            - switch-to-live-now
+#          filters:
+#            branches:
+#              only: kotlin-docker
