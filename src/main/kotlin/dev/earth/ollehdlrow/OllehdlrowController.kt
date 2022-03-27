@@ -8,6 +8,6 @@ class HelloWorldController {
 
     @RequestMapping("/")
     fun home(): String {
-        return "Test full deployment again"
+        return "Test named commands"
     }
 }
