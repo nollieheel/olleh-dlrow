@@ -57,7 +57,7 @@ jobs:
       - image: cimg/python:3.9
     steps:
       - setup-awscli
-      - get-latest-image-tag
+      - get-latest-image-tag:
           repo-name: $AWS_ECR_REPO_NAME
       - run:
           name: "Increment latest image tag"
@@ -75,7 +75,7 @@ jobs:
       - image: cimg/python:3.9
     steps:
       - setup-awscli
-      - get-latest-image-tag
+      - get-latest-image-tag:
           repo-name: $AWS_ECR_REPO_NAME
       - get-deploy-variables
       - aws-ecs/update-service:
