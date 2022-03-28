@@ -72,7 +72,8 @@ jobs:
     steps:
       - setup-awscli
       - get-latest-image-tag:
-          repo-name: $AWS_ECR_REPO_NAME
+          #repo-name: $AWS_ECR_REPO_NAME
+          repo-name: nester/fe
       - increment-latest-tag
 #      - aws-ecr/build-and-push-image:
 #          setup-remote-docker: true
