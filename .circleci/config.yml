@@ -82,6 +82,29 @@ jobs:
           remote-docker-layer-caching: true
           repo: $AWS_ECR_REPO_NAME
           tag: ${CONF_NEW_IMG_TAG},latest
+  simple-deploy-service:
+    parameters:
+      repo-name:
+        type: string
+      service-name:
+        type: string
+      container-name:
+        type: string
+      family:
+        type: string
+    docker:
+      - image: cimg/python:3.9
+    steps:
+      - setup-awscli
+      - get-latest-image-tag:
+          repo-name: <<parameters.repo-name>>
+      - aws-ecs/update-service:
+          cluster-name: $AWS_ECS_CLUSTER_NAME
+          service-name: <<parameters.service-name>>
+          family: <<parameters.family>>
+          container-image-name-updates: "container=<<parameters.container-name>>,tag=${CONF_LATEST_IMG_TAG}"
+          task-definition-tags: 'key=CreatedBy,value=CircleCI'
+          verify-revision-is-deployed: true
   selective-deploy-service:
     docker:
       - image: cimg/python:3.9
@@ -116,42 +139,42 @@ jobs:
       - run: echo nothing
 
 workflows:
-#  qa_build_push_deploy:
-#    jobs:
-#      - build-and-push:
-#          repo-name: $AWS_ECR_QA_REPO_NAME
-#          filters:
-#            branches:
-#              only: kotlin-docker
-  prod_build_push_deploy:
+  qa_build_push_deploy:
     jobs:
+      - build-and-push:
+          repo-name: $AWS_ECR_QA_REPO_NAME
+          filters:
+            branches:
+              only: kotlin-docker
+      - simple-deploy-service:
+          repo-name: $AWS_ECR_QA_REPO_NAME
+          service-name: $AWS_ECS_QA_SERVICE
+          container-name: $AWS_TASK_DEF_QA_CONTAINER
+          family: $AWS_TASK_DEF_QA_FAMILY
+#  prod_build_push_deploy:
+#    jobs:
 #      - test-job:
 #          filters:
 #            branches:
 #              only: kotlin-docker
-      - build-and-push:
-          repo-name: $AWS_ECR_REPO_NAME
-          filters:
-            branches:
-              only: kotlin-docker
-      - pause:
-          type: approval
-          requires:
-            - build-and-push
-      - selective-deploy-service:
-          requires:
-            #- build-and-push
-            - pause
-          filters:
-            branches:
-              only: kotlin-docker
-      - switch-to-live-now:
-          type: approval
-          requires:
-            - selective-deploy-service
-      - toggle-target-groups:
-          requires:
-            - switch-to-live-now
-          filters:
-            branches:
-              only: kotlin-docker
+#      - build-and-push:
+#          repo-name: $AWS_ECR_REPO_NAME
+#          filters:
+#            branches:
+#              only: kotlin-docker
+#      - selective-deploy-service:
+#          requires:
+#            - build-and-push
+#          filters:
+#            branches:
+#              only: kotlin-docker
+#      - switch-to-live-now:
+#          type: approval
+#          requires:
+#            - selective-deploy-service
+#      - toggle-target-groups:
+#          requires:
+#            - switch-to-live-now
+#          filters:
+#            branches:
+#              only: kotlin-docker
