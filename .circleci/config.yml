@@ -151,6 +151,11 @@ workflows:
           service-name: $AWS_ECS_QA_SERVICE
           container-name: $AWS_TASK_DEF_QA_CONTAINER
           family: $AWS_TASK_DEF_QA_FAMILY
+          requires:
+            - build-and-push
+          filters:
+            branches:
+              only: kotlin-docker
 #  prod_build_push_deploy:
 #    jobs:
 #      - test-job:
