@@ -15,11 +15,14 @@ commands:
           version: jq-1.6
   get-latest-image-tag:
     description: "Get the number tag of the image currently marked as latest"
+    parameters:
+      repo-name:
+        type: string
     steps:
       - run:
           name: "Get latest number tag of image"
           command: |
-            tag=$(aws ecr describe-images --repository-name ${AWS_ECR_REPO_NAME} --image-ids imageTag=latest | jq -r '.imageDetails[0].imageTags | map(select(. != "latest"))[0]')
+            tag=$(aws ecr describe-images --repository-name <<parameters.repo-name>> --image-ids imageTag=latest | jq -r '.imageDetails[0].imageTags | map(select(. != "latest"))[0]')
 
             echo Latest image tag is ${tag}
             echo "export LATEST_IMAGE_TAG=${tag}" >> $BASH_ENV
@@ -55,6 +58,7 @@ jobs:
     steps:
       - setup-awscli
       - get-latest-image-tag
+          repo-name: $AWS_ECR_REPO_NAME
       - run:
           name: "Increment latest image tag"
           command: |
@@ -64,7 +68,7 @@ jobs:
       - aws-ecr/build-and-push-image:
           setup-remote-docker: true
           remote-docker-layer-caching: true
-          repo: ${AWS_ECR_REPO_NAME}
+          repo: $AWS_ECR_REPO_NAME
           tag: ${NEW_IMAGE_TAG},latest
   deploy-service:
     docker:
@@ -72,11 +76,12 @@ jobs:
     steps:
       - setup-awscli
       - get-latest-image-tag
+          repo-name: $AWS_ECR_REPO_NAME
       - get-deploy-variables
       - aws-ecs/update-service:
-          cluster-name: ${AWS_ECS_CLUSTER_NAME}
-          service-name: ${DEPLOY_SERVICE}
-          family: ${AWS_TASK_DEF_FAMILY}
+          cluster-name: $AWS_ECS_CLUSTER_NAME
+          service-name: $DEPLOY_SERVICE
+          family: $AWS_TASK_DEF_FAMILY
           container-image-name-updates: 'container=${AWS_TASK_DEF_CONTAINER},tag=${LATEST_IMAGE_TAG}'
           task-definition-tags: 'key=CreatedBy,value=CircleCI'
           verify-revision-is-deployed: true
@@ -101,14 +106,14 @@ jobs:
 workflows:
   build_push_deploy:
     jobs:
-      - test-job:
-          filters:
-            branches:
-              only: kotlin-docker
-#      - build-and-push:
+#      - test-job:
 #          filters:
 #            branches:
 #              only: kotlin-docker
+      - build-and-push:
+          filters:
+            branches:
+              only: kotlin-docker
 #      - deploy-service:
 #          requires:
 #            - build-and-push
