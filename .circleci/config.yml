@@ -26,6 +26,15 @@ commands:
 
             echo Latest image tag is ${tag}
             echo "export LATEST_IMAGE_TAG=${tag}" >> $BASH_ENV
+  increment-latest-tag:
+    description: "Increment the LATEST_IMAGE_TAG var in BASH_ENV"
+    steps:
+      - run:
+          name: "Increment latest image tag"
+          command: |
+            tag=$((LATEST_IMAGE_TAG + 1))
+            echo New image tag will be ${tag}
+            echo "export NEW_IMAGE_TAG=${tag}" >> $BASH_ENV
   get-deploy-variables:
     description: "Obtain deploy variables"
     steps:
@@ -59,17 +68,12 @@ jobs:
       - setup-awscli
       - get-latest-image-tag:
           repo-name: $AWS_ECR_REPO_NAME
-      - run:
-          name: "Increment latest image tag"
-          command: |
-            tag=$((LATEST_IMAGE_TAG + 1))
-            echo New image tag will be ${tag}
-            echo "export NEW_IMAGE_TAG=${tag}" >> $BASH_ENV
-      - aws-ecr/build-and-push-image:
-          setup-remote-docker: true
-          remote-docker-layer-caching: true
-          repo: $AWS_ECR_REPO_NAME
-          tag: ${NEW_IMAGE_TAG},latest
+      - increment-latest-tag
+#      - aws-ecr/build-and-push-image:
+#          setup-remote-docker: true
+#          remote-docker-layer-caching: true
+#          repo: $AWS_ECR_REPO_NAME
+#          tag: ${NEW_IMAGE_TAG},latest
   deploy-service:
     docker:
       - image: cimg/python:3.9
