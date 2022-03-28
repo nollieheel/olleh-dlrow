@@ -169,18 +169,18 @@ workflows:
 #      - test-job:
 #          filters:
 #            branches:
-#              only: kotlin-docker
+#              only: <<pipeline.parameters.prod-branch>>
 #      - build-and-push:
 #          repo-name: $AWS_ECR_REPO_NAME
 #          filters:
 #            branches:
-#              only: kotlin-docker
+#              only: <<pipeline.parameters.prod-branch>>
 #      - selective-deploy-service:
 #          requires:
 #            - build-and-push
 #          filters:
 #            branches:
-#              only: kotlin-docker
+#              only: <<pipeline.parameters.prod-branch>>
 #      - switch-to-live-now:
 #          type: approval
 #          requires:
@@ -190,4 +190,4 @@ workflows:
 #            - switch-to-live-now
 #          filters:
 #            branches:
-#              only: kotlin-docker
+#              only: <<pipeline.parameters.prod-branch>>
