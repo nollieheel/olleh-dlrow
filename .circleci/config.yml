@@ -22,7 +22,12 @@ commands:
       - run:
           name: "Get latest number tag of image"
           command: |
-            tag=$(aws ecr describe-images --repository-name <<parameters.repo-name>> --image-ids imageTag=latest | jq -r '.imageDetails[0].imageTags | map(select(. != "latest"))[0]')
+            res=$(aws ecr describe-images --repository-name <<parameters.repo-name>> --image-ids imageTag=latest || echo empty)
+            if [[ "$res" == "empty" ]]; then
+              tag=0
+            else
+              tag=$(echo $res | jq -r '.imageDetails[0].imageTags | map(select(. != "latest"))[0]')
+            fi
 
             echo Latest image tag is ${tag}
             echo "export LATEST_IMAGE_TAG=${tag}" >> $BASH_ENV
