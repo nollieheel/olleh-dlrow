@@ -8,6 +8,6 @@ class HelloWorldController {
 
     @RequestMapping("/")
     fun home(): String {
-        return "QA straight deploy"
+        return "Test or pipeline parameters"
     }
 }
