@@ -21,12 +21,29 @@ commands:
       - jq/install:
           version: jq-1.6
 
+  get-dist-config:
+    description: "Request distribution config from Cloudfront"
+    parameters:
+      dist-id:
+        type: string
+      filename:
+        type: string
+    steps:
+      - run:
+          name: "Request distribution config from Cloudfront"
+          command: |
+            aws cloudfront get-distribution-config --id <<parameters.dist-id>> > <<parameters.filename>>
+
 jobs:
 
   generate-build:
     docker:
       - image: cimg/node:14.16.1
     steps:
+      - run: node --version && yarn --version
+      - run:
+          name: "Create timestamp file"
+          command: date --utc +%Y%m%d_%H%M%S > circleci_timestamp
       - checkout
 #      - restore_cache:
 #          keys:
@@ -36,14 +53,40 @@ jobs:
 #          key: node-modules-v1_{{ checksum "yarn.lock" }}
 #          paths:
 #            - node_modules
-      - run: mkdir test_files
-      - run: echo 'the quick brown fox' > test_files/one
-      - run: date --utc +%Y%m%d_%H%M%S > timestamp
+#      - run: yarn build
+#      - run:
+#          name: "Create build tarball"
+#          command: tar czf build.tar.gz build
       - persist_to_workspace:
           root: .
           paths:
-            - test_files
-            - timestamp
+            - circleci_timestamp
+#            - build
+#            - build.tar.gz
+
+  get-distribution-configs:
+    docker:
+      - image: cimg/python:3.9
+    steps:
+      - setup-awscli
+      - get-dist-config:
+          dist-id: $AWS_CF_PRELIVE
+          filename: circleci_prelive_dist_config.json
+      - persist_to_workspace:
+          root: .
+          paths:
+            - circleci_prelive_dist_config.json
+
+
+
+#      - run: mkdir test_files
+#      - run: echo 'the quick brown fox' > test_files/one
+#      - run: date --utc +%Y%m%d_%H%M%S > timestamp
+#      - persist_to_workspace:
+#          root: .
+#          paths:
+#            - test_files
+#            - timestamp
 
   another-job:
     docker:
@@ -51,7 +94,8 @@ jobs:
     steps:
       - attach_workspace:
           at: ./
-      - run: cat timestamp && cat test_files/one
+      - run: cat circleci_timestamp
+      - run: cat circleci_prelive_dist_config.json
 
 workflows:
 
@@ -79,9 +123,15 @@ workflows:
           filters:
             branches:
               only: <<pipeline.parameters.prod-branch>>
-      - another-job:
+      - get-distribution-configs:
           requires:
             - generate-build
+          filters:
+            branches:
+              only: <<pipeline.parameters.prod-branch>>
+      - another-job:
+          requires:
+            - get-distribution-configs
           filters:
             branches:
               only: <<pipeline.parameters.prod-branch>>
