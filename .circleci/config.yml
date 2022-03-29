@@ -41,10 +41,10 @@ jobs:
       - image: cimg/node:14.16.1
     steps:
       - run: node --version && yarn --version
+      - checkout
       - run:
           name: "Create timestamp file"
           command: date --utc +%Y%m%d_%H%M%S > circleci_timestamp
-      - checkout
 #      - restore_cache:
 #          keys:
 #            - node-modules-v1_{{ checksum "yarn.lock" }}
