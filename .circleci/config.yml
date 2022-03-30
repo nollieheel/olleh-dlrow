@@ -69,17 +69,17 @@ jobs:
       - image: cimg/python:3.9
     steps:
       - setup-awscli
-      - get-dist-config:
-          dist-id: $AWS_CF_PRELIVE
-          filename: circleci_prelive_dist_config.json
-      - get-dist-config:
-          dist-id: $AWS_CF_LIVE
-          filename: circleci_live_dist_config.json
-      - persist_to_workspace:
-          root: .
-          paths:
-            - circleci_live_dist_config.json
-            - circleci_prelive_dist_config.json
+#      - get-dist-config:
+#          dist-id: $AWS_CF_PRELIVE
+#          filename: circleci_prelive_dist_config.json
+#      - get-dist-config:
+#          dist-id: $AWS_CF_LIVE
+#          filename: circleci_live_dist_config.json
+#      - persist_to_workspace:
+#          root: .
+#          paths:
+#            - circleci_live_dist_config.json
+#            - circleci_prelive_dist_config.json
 
 
 
@@ -91,8 +91,8 @@ jobs:
       - attach_workspace:
           at: ./
       - run: cat circleci_timestamp
-      - run: cat circleci_live_dist_config.json
-      - run: cat circleci_prelive_dist_config.json
+#      - run: cat circleci_live_dist_config.json
+#      - run: cat circleci_prelive_dist_config.json
 
 workflows:
 
