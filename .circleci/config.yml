@@ -43,6 +43,29 @@ commands:
           command: |
             aws cloudfront get-distribution-config --id <<parameters.dist-id>> > <<parameters.filename>>
 
+  invalidate-all-objects:
+    description: "Invalidate all objects in distribution"
+    parameters:
+      dist-id:
+        type: string
+    steps:
+      - run:
+          name: "Invalidate all objects in distribution"
+          command: |
+            res=$(aws cloudfront create-invalidation --distribution-id <<parameters.dist-id>> --paths "/*")
+            inv_id=$(echo $res | jq -r '.Invalidation.Id')
+            aws cloudfront wait invalidation-completed --distribution-id <<parameters.dist-id>> --id ${inv_id}
+
+  wait-dist:
+    description: "Wait for distribution to be deployed"
+    parameters:
+      dist-id:
+        type: string
+    steps:
+      - run:
+          name: "Wait for distribution to be deployed"
+          command: aws cloudfront wait distribution-deployed --id <<parameters.dist-id>>
+
 jobs:
 
   generate-build:
@@ -100,6 +123,7 @@ jobs:
       - run:
           name: "Upload the build tarball into bucket"
           command: |
+            echo Doing best effort upload of build archive
             fname=$(cat <<pipeline.parameters.timestamp-file>>).tar.gz
             aws s3 cp build.tar.gz s3://${AWS_S3_ROOT_BUCKET}/frontend/tarballs/${fname}
 
@@ -111,12 +135,50 @@ jobs:
       - attach_workspace:
           at: ./
       - run:
-          name: "Find prelive bucket path"
+          name: "Upload build directory to Prelive bucket path"
           command: |
-            prelive_origin_path=$(jq -r --arg originid $AWS_CF_ORIGIN_ID '.DistributionConfig.Origins.Items | map(select(.Id == $originid))[0].OriginPath' <<pipeline.parameters.prelive-dist-config-file>>)
-            echo $prelive_origin_path
+            prelive_path=$(jq -r --arg originid $AWS_CF_ORIGIN_ID '.DistributionConfig.Origins.Items | map(select(.Id == $originid))[0].OriginPath' <<pipeline.parameters.prelive-dist-config-file>>)
+            aws s3 sync build/ s3://${AWS_S3_ROOT_BUCKET}${prelive_path}/ --delete
+      - invalidate-all-objects:
+          dist-id: $AWS_CF_PRELIVE
 
+  toggle-distribution-paths:
+    docker:
+      - image: cimg/python:3.9
+    steps:
+      - setup-awscli
+      - attach_workspace:
+          at: ./
+      - run:
+          name: "dasd"
+          command: |
+            live_path_1=$(jq -r --arg originid $AWS_CF_ORIGIN_ID '.DistributionConfig.Origins.Items | map(select(.Id == $originid))[0].OriginPath' <<pipeline.parameters.live-dist-config-file>>)
+            prelive_path_1=$(jq -r --arg originid $AWS_CF_ORIGIN_ID '.DistributionConfig.Origins.Items | map(select(.Id == $originid))[0].OriginPath' <<pipeline.parameters.prelive-dist-config-file>>)
 
+            jq -r --arg originid $AWS_CF_ORIGIN_ID --arg newpath $prelive_path_1 '.DistributionConfig | .Origins.Items = (.Origins.Items | map(if (.Id == $originid) then (.OriginPath = $newpath) else . end))' <<pipeline.parameters.live-dist-config-file>> > live_2.json
+            jq -r --arg originid $AWS_CF_ORIGIN_ID --arg newpath $live_path_1 '.DistributionConfig | .Origins.Items = (.Origins.Items | map(if (.Id == $originid) then (.OriginPath = $newpath) else . end))' <<pipeline.parameters.prelive-dist-config-file>> > prelive_2.json
+            cat live_2.json
+            cat prelive_2.json
+
+  wait-dists:
+    docker:
+      - image: cimg/python:3.9
+    steps:
+      - setup-awscli
+      - wait-dist:
+          dist-id: $AWS_CF_LIVE
+      - wait-dist:
+          dist-id: $AWS_CF_PRELIVE
+
+  invalidate-dists:
+    docker:
+      - image: cimg/python:3.9
+    steps:
+      - setup-awscli
+      - invalidate-all-objects:
+          dist-id: $AWS_CF_LIVE
+      - invalidate-all-objects:
+          dist-id: $AWS_CF_PRELIVE
 
   another-job:
     docker:
@@ -166,7 +228,7 @@ workflows:
           filters:
             branches:
               only: <<pipeline.parameters.prod-branch>>
-      - upload-to-prelive-bucket:
+      - toggle-distribution-paths:
           requires:
             - another-job
           filters:
