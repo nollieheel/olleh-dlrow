@@ -128,7 +128,7 @@ workflows:
               only: <<pipeline.parameters.prod-branch>>
       - another-job:
           requires:
-            - get-distribution-configs
+            - get-dist-configs
           filters:
             branches:
               only: <<pipeline.parameters.prod-branch>>
