@@ -7,6 +7,15 @@ parameters:
   qa-branch:
     type: string
     default: "react-static"
+  live-dist-config-file:
+    type: string
+    default: "circleci_live_dist_config.json"
+  prelive-dist-config-file:
+    type: string
+    default: "circleci_prelive_dist_config.json"
+  timestamp-file:
+    type: string
+    default: "circleci_timestamp"
 
 orbs:
   aws-cli: circleci/aws-cli@2.1.0
@@ -44,7 +53,7 @@ jobs:
       - checkout
       - run:
           name: "Create timestamp file"
-          command: date --utc +%Y%m%d_%H%M%S > circleci_timestamp
+          command: date --utc +%Y%m%d_%H%M%S > <<pipeline.parameters.timestamp-file>>
 #      - restore_cache:
 #          keys:
 #            - node-modules-v1_{{ checksum "yarn.lock" }}
@@ -60,7 +69,7 @@ jobs:
       - persist_to_workspace:
           root: .
           paths:
-            - circleci_timestamp
+            - <<pipeline.parameters.timestamp-file>>
 #            - build
 #            - build.tar.gz
 
@@ -69,18 +78,42 @@ jobs:
       - image: cimg/python:3.9
     steps:
       - setup-awscli
-#      - get-dist-config:
-#          dist-id: $AWS_CF_PRELIVE
-#          filename: circleci_prelive_dist_config.json
-#      - get-dist-config:
-#          dist-id: $AWS_CF_LIVE
-#          filename: circleci_live_dist_config.json
-#      - persist_to_workspace:
-#          root: .
-#          paths:
-#            - circleci_live_dist_config.json
-#            - circleci_prelive_dist_config.json
+      - get-dist-config:
+          dist-id: $AWS_CF_PRELIVE
+          filename: <<pipeline.parameters.prelive-dist-config-file>>
+      - get-dist-config:
+          dist-id: $AWS_CF_LIVE
+          filename: <<pipeline.parameters.live-dist-config-file>>
+      - persist_to_workspace:
+          root: .
+          paths:
+            - <<pipeline.parameters.live-dist-config-file>>
+            - <<pipeline.parameters.prelive-dist-config-file>>
 
+  upload-build-archive:
+    docker:
+      - image: cimg/python:3.9
+    steps:
+      - setup-awscli
+      - attach_workspace:
+          at: ./
+      - run:
+          name: "Upload the build tarball into bucket"
+          command: |
+            fname=$(cat <<pipeline.parameters.timestamp-file>>).tar.gz
+            aws s3 cp build.tar.gz s3://${AWS_S3_ROOT_BUCKET}/frontend/tarballs/${fname}
+
+  upload-to-prelive-bucket:
+    docker:
+      - image: cimg/python:3.9
+    steps:
+      - setup-awscli
+      - attach_workspace:
+          at: ./
+      - run:
+          name: "Find prelive bucket path"
+          command: |
+            prelive_origin_path=$(jq -r --arg originid $AWS_CF_ORIGIN_ID '.DistributionConfig.Origins.Items | map(select(.Id == $originid))[0].OriginPath' circleci_prelive_dist_config.json)
 
 
 
@@ -90,9 +123,9 @@ jobs:
     steps:
       - attach_workspace:
           at: ./
-      - run: cat circleci_timestamp
-#      - run: cat circleci_live_dist_config.json
-#      - run: cat circleci_prelive_dist_config.json
+      - run: cat <<pipeline.parameters.timestamp-file>>
+      - run: cat <<pipeline.parameters.live-dist-config-file>>
+      - run: cat <<pipeline.parameters.prelive-dist-config-file>>
 
 workflows:
 
