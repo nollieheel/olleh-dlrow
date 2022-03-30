@@ -64,7 +64,7 @@ jobs:
 #            - build
 #            - build.tar.gz
 
-  get-distribution-configs:
+  get-dist-configs:
     docker:
       - image: cimg/python:3.9
     steps:
@@ -72,21 +72,17 @@ jobs:
       - get-dist-config:
           dist-id: $AWS_CF_PRELIVE
           filename: circleci_prelive_dist_config.json
+      - get-dist-config:
+          dist-id: $AWS_CF_LIVE
+          filename: circleci_live_dist_config.json
       - persist_to_workspace:
           root: .
           paths:
+            - circleci_live_dist_config.json
             - circleci_prelive_dist_config.json
 
 
 
-#      - run: mkdir test_files
-#      - run: echo 'the quick brown fox' > test_files/one
-#      - run: date --utc +%Y%m%d_%H%M%S > timestamp
-#      - persist_to_workspace:
-#          root: .
-#          paths:
-#            - test_files
-#            - timestamp
 
   another-job:
     docker:
@@ -95,6 +91,7 @@ jobs:
       - attach_workspace:
           at: ./
       - run: cat circleci_timestamp
+      - run: cat circleci_live_dist_config.json
       - run: cat circleci_prelive_dist_config.json
 
 workflows:
@@ -123,7 +120,7 @@ workflows:
           filters:
             branches:
               only: <<pipeline.parameters.prod-branch>>
-      - get-distribution-configs:
+      - get-dist-configs:
           requires:
             - generate-build
           filters:
