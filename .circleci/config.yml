@@ -114,7 +114,7 @@ jobs:
           name: "Find prelive bucket path"
           command: |
             prelive_origin_path=$(jq -r --arg originid $AWS_CF_ORIGIN_ID '.DistributionConfig.Origins.Items | map(select(.Id == $originid))[0].OriginPath' <<pipeline.parameters.prelive-dist-config-file>>)
-            cat $prelive_origin_path
+            echo $prelive_origin_path
 
 
 
