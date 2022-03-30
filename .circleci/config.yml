@@ -113,7 +113,8 @@ jobs:
       - run:
           name: "Find prelive bucket path"
           command: |
-            prelive_origin_path=$(jq -r --arg originid $AWS_CF_ORIGIN_ID '.DistributionConfig.Origins.Items | map(select(.Id == $originid))[0].OriginPath' circleci_prelive_dist_config.json)
+            prelive_origin_path=$(jq -r --arg originid $AWS_CF_ORIGIN_ID '.DistributionConfig.Origins.Items | map(select(.Id == $originid))[0].OriginPath' <<pipeline.parameters.prelive-dist-config-file>>)
+            cat $prelive_origin_path
 
 
 
@@ -162,6 +163,12 @@ workflows:
       - another-job:
           requires:
             - get-dist-configs
+          filters:
+            branches:
+              only: <<pipeline.parameters.prod-branch>>
+      - upload-to-prelive-bucket:
+          requires:
+            - another-job
           filters:
             branches:
               only: <<pipeline.parameters.prod-branch>>
