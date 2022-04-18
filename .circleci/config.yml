@@ -3,19 +3,10 @@ version: 2.1
 parameters:
   prod-branch:
     type: string
-    default: "react-static"
+    default: "disabled"
   qa-branch:
     type: string
-    default: "react-static"
-  live-dist-config-file:
-    type: string
-    default: "circleci_live_dist_config.json"
-  prelive-dist-config-file:
-    type: string
-    default: "circleci_prelive_dist_config.json"
-  timestamp-file:
-    type: string
-    default: "circleci_timestamp"
+    default: "disabled"
 
 orbs:
   aws-cli: circleci/aws-cli@2.1.0
@@ -35,13 +26,67 @@ commands:
     parameters:
       dist-id:
         type: string
-      filename:
+      output:
         type: string
     steps:
       - run:
           name: "Request distribution config from Cloudfront"
           command: |
-            aws cloudfront get-distribution-config --id <<parameters.dist-id>> > <<parameters.filename>>
+            aws cloudfront get-distribution-config --id <<parameters.dist-id>> > <<parameters.output>>
+
+  get-origin-path:
+    description: "Extract origin path from dist config file"
+    parameters:
+      dist-file:
+        type: string
+      output:
+        type: string
+    steps:
+      - run:
+          name: "Extract origin path from dist config file"
+          command: |
+            jq -r --arg originid $AWS_CF_ORIGIN_ID '.DistributionConfig.Origins.Items | map(select(.Id == $originid))[0].OriginPath' <<parameters.dist-file>> > <<parameters.output>>
+
+  get-etag:
+    description: "Extract ETag from dist config file"
+    parameters:
+      dist-file:
+        type: string
+      output:
+        type: string
+    steps:
+      - run:
+          name: "Extract etag from dist config file"
+          command: jq -r '.ETag' <<parameters.dist-file>> > <<parameters.output>>
+
+  update-dist-config:
+    description: "Update the origin path in the dist config"
+    parameters:
+      dist-file:
+        type: string
+      new-path-file:
+        type: string
+      output:
+        type: string
+    steps:
+      - run:
+          name: "Update the origin path in the dist config"
+          command: |
+            jq -r --arg originid $AWS_CF_ORIGIN_ID --arg newpath $(cat <<parameters.new-path-file>>) '.DistributionConfig | .Origins.Items = (.Origins.Items | map(if (.Id == $originid) then (.OriginPath = $newpath) else . end))' <<parameters.dist-file>> > <<parameters.output>>
+
+  update-dist-in-aws:
+    description: "Update the Cloudfront dist in AWS"
+    parameters:
+      dist-id:
+        type: string
+      etag-file:
+        type: string
+      dist-file:
+        type: string
+    steps:
+      - run:
+          name: "Update the Cloudfront dist in AWS"
+          command: aws cloudfront update-distribution --id <<parameters.dist-id>> --if-match $(cat <<parameters.etag-file>>) --distribution-config file://<<parameters.dist-file>>
 
   invalidate-all-objects:
     description: "Invalidate all objects in distribution"
@@ -68,50 +113,128 @@ commands:
 
 jobs:
 
-  generate-build:
+  generate-prebuild-files:
+    parameters:
+      env-vars-prefix:
+        type: string
+        default: PROD_
     docker:
       - image: cimg/node:14.16.1
     steps:
-      - run: node --version && yarn --version
-      - checkout
+      - run:
+          name: "Generate .env.local"
+          command: export | grep <<parameters.env-vars-prefix>> | sed 's/^declare -x <<parameters.env-vars-prefix>>//' > .env.local
       - run:
           name: "Create timestamp file"
-          command: date --utc +%Y%m%d_%H%M%S > <<pipeline.parameters.timestamp-file>>
-#      - restore_cache:
-#          keys:
-#            - node-modules-v1_{{ checksum "yarn.lock" }}
-#      - run: yarn install
-#      - save_cache:
-#          key: node-modules-v1_{{ checksum "yarn.lock" }}
-#          paths:
-#            - node_modules
-#      - run: yarn build
-#      - run:
-#          name: "Create build tarball"
-#          command: tar czf build.tar.gz build
+          command: date --utc +%Y%m%d_%H%M%S > cc_timestamp
       - persist_to_workspace:
           root: .
           paths:
-            - <<pipeline.parameters.timestamp-file>>
-#            - build
-#            - build.tar.gz
+            - .env.local
+            - cc_timestamp
 
-  get-dist-configs:
+  generate-postbuild-files:
+    parameters:
+      is-qa:
+        type: boolean
+        default: false
     docker:
       - image: cimg/python:3.9
     steps:
       - setup-awscli
-      - get-dist-config:
-          dist-id: $AWS_CF_PRELIVE
-          filename: <<pipeline.parameters.prelive-dist-config-file>>
-      - get-dist-config:
-          dist-id: $AWS_CF_LIVE
-          filename: <<pipeline.parameters.live-dist-config-file>>
+      - run:
+          name: "Generate default files for QA env"
+          command: |
+            echo '' > cc_live_etag
+            echo '' > cc_prelive_etag
+            echo '' > cc_live_origin_path
+            echo '' > cc_prelive_origin_path
+            echo '/frontend/tarballs/qa' > cc_s3_archive_path
+            echo '/frontend/qa/build' > cc_s3_web_path
+            echo '' > cc_live_dist_config_new.json
+            echo '' > cc_prelive_dist_config_new.json
+      - unless:
+          condition: <<parameters.is-qa>>
+          steps:
+            #
+            # Request dist config
+            - get-dist-config:
+                dist-id: $AWS_CF_LIVE
+                output: cc_live_dist_config.json
+            - get-dist-config:
+                dist-id: $AWS_CF_PRELIVE
+                output: cc_prelive_dist_config.json
+            #
+            # Extract ETag
+            - get-etag:
+                dist-file: cc_live_dist_config.json
+                output: cc_live_etag
+            - get-etag:
+                dist-file: cc_prelive_dist_config.json
+                output: cc_prelive_etag
+            #
+            # Extract OriginPath
+            - get-origin-path:
+                dist-file: cc_live_dist_config.json
+                output: cc_live_origin_path
+            - get-origin-path:
+                dist-file: cc_prelive_dist_config.json
+                output: cc_prelive_origin_path
+            #
+            # Generate S3 paths
+            - run: echo '/frontend/tarballs/production' > cc_s3_archive_path
+            - run: cp cc_prelive_origin_path cc_s3_web_path
+            #
+            # Generate new dist config
+            - update-dist-config:
+                dist-file: cc_live_dist_config.json
+                new-path-file: cc_prelive_origin_path
+                output: cc_live_dist_config_new.json
+            - update-dist-config:
+                dist-file: cc_prelive_dist_config.json
+                new-path-file: cc_live_origin_path
+                output: cc_prelive_dist_config_new.json
       - persist_to_workspace:
           root: .
           paths:
-            - <<pipeline.parameters.live-dist-config-file>>
-            - <<pipeline.parameters.prelive-dist-config-file>>
+            - cc_live_etag
+            - cc_prelive_etag
+            - cc_live_origin_path
+            - cc_prelive_origin_path
+            - cc_s3_archive_path
+            - cc_s3_web_path
+            - cc_live_dist_config_new.json
+            - cc_prelive_dist_config_new.json
+
+  generate-build:
+    docker:
+      - image: cimg/node:14.16.1
+    environment:
+      # This should always be production.
+      NODE_ENV: production
+    steps:
+      - run: node --version && yarn --version
+      - checkout
+      - attach_workspace:
+          at: ./
+      - restore_cache:
+          keys:
+            - node-modules-v1_{{ checksum "yarn.lock" }}
+      - run: yarn install
+      - save_cache:
+          key: node-modules-v1_{{ checksum "yarn.lock" }}
+          paths:
+            - node_modules
+      #- run: yarn build
+      - run: CI=false yarn build
+      - run:
+          name: "Create build tarball"
+          command: tar czf build.tar.gz build
+      - persist_to_workspace:
+          root: .
+          paths:
+            - build
+            - build.tar.gz
 
   upload-build-archive:
     docker:
@@ -122,12 +245,9 @@ jobs:
           at: ./
       - run:
           name: "Upload the build tarball into bucket"
-          command: |
-            echo Doing best effort upload of build archive
-            fname=$(cat <<pipeline.parameters.timestamp-file>>).tar.gz
-            aws s3 cp build.tar.gz s3://${AWS_S3_ROOT_BUCKET}/frontend/tarballs/${fname}
+          command: aws s3 cp build.tar.gz s3://${AWS_S3_ROOT_BUCKET}$(cat cc_s3_archive_path)/$(cat cc_timestamp).tar.gz
 
-  upload-to-prelive-bucket:
+  upload-to-bucket:
     docker:
       - image: cimg/python:3.9
     steps:
@@ -135,118 +255,129 @@ jobs:
       - attach_workspace:
           at: ./
       - run:
-          name: "Upload build directory to Prelive bucket path"
+          name: "Upload build directory to S3 bucket"
           command: |
-            prelive_path=$(jq -r --arg originid $AWS_CF_ORIGIN_ID '.DistributionConfig.Origins.Items | map(select(.Id == $originid))[0].OriginPath' <<pipeline.parameters.prelive-dist-config-file>>)
-            aws s3 sync build/ s3://${AWS_S3_ROOT_BUCKET}${prelive_path}/ --delete
-      - invalidate-all-objects:
-          dist-id: $AWS_CF_PRELIVE
+            s3path=$(cat cc_s3_web_path)
+            aws s3 sync build/ s3://${AWS_S3_ROOT_BUCKET}${s3path}/ --delete
+            aws s3 cp cc_timestamp s3://${AWS_S3_ROOT_BUCKET}$(dirname $s3path)/version
 
-  toggle-distribution-paths:
+  switch-distribution-paths:
     docker:
       - image: cimg/python:3.9
     steps:
       - setup-awscli
       - attach_workspace:
           at: ./
-      - run:
-          name: "dasd"
-          command: |
-            live_path_1=$(jq -r --arg originid $AWS_CF_ORIGIN_ID '.DistributionConfig.Origins.Items | map(select(.Id == $originid))[0].OriginPath' <<pipeline.parameters.live-dist-config-file>>)
-            prelive_path_1=$(jq -r --arg originid $AWS_CF_ORIGIN_ID '.DistributionConfig.Origins.Items | map(select(.Id == $originid))[0].OriginPath' <<pipeline.parameters.prelive-dist-config-file>>)
+      - update-dist-in-aws:
+          dist-id: $AWS_CF_LIVE
+          etag-file: cc_live_etag
+          dist-file: cc_live_dist_config_new.json
+      - update-dist-in-aws:
+          dist-id: $AWS_CF_PRELIVE
+          etag-file: cc_prelive_etag
+          dist-file: cc_prelive_dist_config_new.json
 
-            jq -r --arg originid $AWS_CF_ORIGIN_ID --arg newpath $prelive_path_1 '.DistributionConfig | .Origins.Items = (.Origins.Items | map(if (.Id == $originid) then (.OriginPath = $newpath) else . end))' <<pipeline.parameters.live-dist-config-file>> > live_2.json
-            jq -r --arg originid $AWS_CF_ORIGIN_ID --arg newpath $live_path_1 '.DistributionConfig | .Origins.Items = (.Origins.Items | map(if (.Id == $originid) then (.OriginPath = $newpath) else . end))' <<pipeline.parameters.prelive-dist-config-file>> > prelive_2.json
-            cat live_2.json
-            cat prelive_2.json
-
-  wait-dists:
+  wait-for-dist:
+    parameters:
+      dist-id:
+        type: string
     docker:
       - image: cimg/python:3.9
     steps:
       - setup-awscli
       - wait-dist:
-          dist-id: $AWS_CF_LIVE
-      - wait-dist:
-          dist-id: $AWS_CF_PRELIVE
+          dist-id: <<parameters.dist-id>>
 
-  invalidate-dists:
+  invalidate-dist:
+    parameters:
+      dist-id:
+        type: string
     docker:
       - image: cimg/python:3.9
     steps:
       - setup-awscli
       - invalidate-all-objects:
-          dist-id: $AWS_CF_LIVE
-      - invalidate-all-objects:
-          dist-id: $AWS_CF_PRELIVE
-
-  another-job:
-    docker:
-      - image: cimg/node:14.16.1
-    steps:
-      - attach_workspace:
-          at: ./
-      - run: cat <<pipeline.parameters.timestamp-file>>
-      - run: cat <<pipeline.parameters.live-dist-config-file>>
-      - run: cat <<pipeline.parameters.prelive-dist-config-file>>
+          dist-id: <<parameters.dist-id>>
 
 workflows:
 
-#  qa_build_push_deploy:
-#    jobs:
-#      - build-and-push:
-#          repo-name: $AWS_ECR_QA_REPO_NAME
-#          filters:
-#            branches:
-#              only: <<pipeline.parameters.qa-branch>>
-#      - simple-deploy-service:
-#          repo-name: $AWS_ECR_QA_REPO_NAME
-#          service-name: $AWS_ECS_QA_SERVICE
-#          container-name: $AWS_TASK_DEF_QA_CONTAINER
-#          family: $AWS_TASK_DEF_QA_FAMILY
-#          requires:
-#            - build-and-push
-#          filters:
-#            branches:
-#              only: <<pipeline.parameters.qa-branch>>
-
-  do-the-thing:
+  build_upload_deploy:
     jobs:
-      - generate-build:
+      - generate-prebuild-files:
+          name: generate-prebuild-files-production
           filters:
             branches:
               only: <<pipeline.parameters.prod-branch>>
-      - get-dist-configs:
+      - generate-prebuild-files:
+          name: generate-prebuild-files-qa
+          env-vars-prefix: QA_
+          filters:
+            branches:
+              only: <<pipeline.parameters.qa-branch>>
+      - generate-build:
+          requires:
+            - generate-prebuild-files-production
+            - generate-prebuild-files-qa
+      - generate-postbuild-files:
+          name: generate-postbuild-files-production
           requires:
             - generate-build
           filters:
             branches:
               only: <<pipeline.parameters.prod-branch>>
-      - another-job:
+      - generate-postbuild-files:
+          name: generate-postbuild-files-qa
+          is-qa: true
           requires:
-            - get-dist-configs
+            - generate-build
+          filters:
+            branches:
+              only: <<pipeline.parameters.qa-branch>>
+      - upload-build-archive:
+          requires:
+            - generate-postbuild-files-production
+            - generate-postbuild-files-qa
+      - upload-to-bucket:
+          requires:
+            - upload-build-archive
+      - invalidate-dist:
+          name: invalidate-prelive-first-time
+          dist-id: $AWS_CF_PRELIVE
+          requires:
+            - upload-to-bucket
           filters:
             branches:
               only: <<pipeline.parameters.prod-branch>>
-      - toggle-distribution-paths:
+      - invalidate-dist:
+          name: invalidate-qa
+          dist-id: $AWS_CF_QA
           requires:
-            - another-job
+            - upload-to-bucket
           filters:
             branches:
-              only: <<pipeline.parameters.prod-branch>>
-#      - selective-deploy-service:
-#          requires:
-#            - build-and-push
-#          filters:
-#            branches:
-#              only: <<pipeline.parameters.prod-branch>>
-#      - switch-to-live-now:
-#          type: approval
-#          requires:
-#            - selective-deploy-service
-#      - toggle-target-groups:
-#          requires:
-#            - switch-to-live-now
-#          filters:
-#            branches:
-#              only: <<pipeline.parameters.prod-branch>>
+              only: <<pipeline.parameters.qa-branch>>
+      - switch-to-live-now:
+          type: approval
+          requires:
+            - invalidate-prelive-first-time
+      - switch-distribution-paths:
+          requires:
+            - switch-to-live-now
+      - wait-for-dist:
+          name: wait-for-dist-live
+          dist-id: $AWS_CF_LIVE
+          requires:
+            - switch-distribution-paths
+      - wait-for-dist:
+          name: wait-for-dist-prelive
+          dist-id: $AWS_CF_PRELIVE
+          requires:
+            - switch-distribution-paths
+      - invalidate-dist:
+          dist-id: $AWS_CF_LIVE
+          requires:
+            - wait-for-dist-live
+      - invalidate-dist:
+          dist-id: $AWS_CF_PRELIVE
+          requires:
+            - wait-for-dist-prelive
