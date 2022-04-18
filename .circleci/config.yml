@@ -15,12 +15,14 @@ orbs:
   jq: circleci/jq@2.2.0
 
 commands:
+
   setup-awscli:
     description: "Setup awscli and jq"
     steps:
       - aws-cli/setup
       - jq/install:
           version: jq-1.6
+
   get-latest-image-tag:
     description: "Get number tag of image currently marked as 'latest' in repo"
     parameters:
@@ -39,6 +41,7 @@ commands:
 
             echo Latest image tag is ${tag}
             echo "export CONF_LATEST_IMG_TAG=${tag}" >> $BASH_ENV
+
   increment-latest-tag:
     description: "Increment CONF_LATEST_IMG_TAG env var"
     steps:
@@ -48,6 +51,7 @@ commands:
             tag=$((CONF_LATEST_IMG_TAG + 1))
             echo New image tag will be ${tag}
             echo "export CONF_NEW_IMG_TAG=${tag}" >> $BASH_ENV
+
   get-deploy-variables:
     description: "Generate variables for selective deploy"
     steps:
@@ -74,6 +78,7 @@ commands:
             echo Deploy to service designation ${tgroup_old_num}
 
 jobs:
+
   build-and-push:
     parameters:
       repo-name:
@@ -88,8 +93,9 @@ jobs:
       - aws-ecr/build-and-push-image:
           setup-remote-docker: true
           remote-docker-layer-caching: true
-          repo: $AWS_ECR_REPO_NAME
+          repo: <<parameters.repo-name>>
           tag: ${CONF_NEW_IMG_TAG},latest
+
   simple-deploy-service:
     parameters:
       repo-name:
@@ -111,8 +117,10 @@ jobs:
           service-name: <<parameters.service-name>>
           family: <<parameters.family>>
           container-image-name-updates: "container=<<parameters.container-name>>,tag=${CONF_LATEST_IMG_TAG}"
+          container-env-var-updates: "container=<<parameters.container-name>>,name=APP_GIT_REFERENCE,value=${CIRCLE_SHA1}"
           task-definition-tags: 'key=CreatedBy,value=CircleCI'
           verify-revision-is-deployed: true
+
   selective-deploy-service:
     docker:
       - image: cimg/python:3.9
@@ -126,8 +134,10 @@ jobs:
           service-name: $CONF_ECS_SERVICE
           family: $AWS_TASK_DEF_FAMILY
           container-image-name-updates: 'container=${AWS_TASK_DEF_CONTAINER},tag=${CONF_LATEST_IMG_TAG}'
+          container-env-var-updates: "container=${AWS_TASK_DEF_CONTAINER},name=APP_GIT_REFERENCE,value=${CIRCLE_SHA1}"
           task-definition-tags: 'key=CreatedBy,value=CircleCI'
           verify-revision-is-deployed: true
+
   toggle-target-groups:
     docker:
       - image: cimg/python:3.9
@@ -140,13 +150,9 @@ jobs:
             aws elbv2 modify-rule --rule-arn ${AWS_RULE_ARN_PRELIVE} --actions Type=forward,TargetGroupArn=${AWS_TGROUP_ARN_BRIDGE}
             aws elbv2 modify-rule --rule-arn ${AWS_RULE_ARN_LIVE} --actions Type=forward,TargetGroupArn=${CONF_LIVE_TGROUP}
             aws elbv2 modify-rule --rule-arn ${AWS_RULE_ARN_PRELIVE} --actions Type=forward,TargetGroupArn=${CONF_PRELIVE_TGROUP}
-  test-job:
-    docker:
-      - image: cimg/python:3.9
-    steps:
-      - run: echo nothing
 
 workflows:
+
   qa_build_push_deploy:
     jobs:
       - build-and-push:
@@ -164,30 +170,27 @@ workflows:
           filters:
             branches:
               only: <<pipeline.parameters.qa-branch>>
-#  prod_build_push_deploy:
-#    jobs:
-#      - test-job:
-#          filters:
-#            branches:
-#              only: <<pipeline.parameters.prod-branch>>
-#      - build-and-push:
-#          repo-name: $AWS_ECR_REPO_NAME
-#          filters:
-#            branches:
-#              only: <<pipeline.parameters.prod-branch>>
-#      - selective-deploy-service:
-#          requires:
-#            - build-and-push
-#          filters:
-#            branches:
-#              only: <<pipeline.parameters.prod-branch>>
-#      - switch-to-live-now:
-#          type: approval
-#          requires:
-#            - selective-deploy-service
-#      - toggle-target-groups:
-#          requires:
-#            - switch-to-live-now
-#          filters:
-#            branches:
-#              only: <<pipeline.parameters.prod-branch>>
+
+  prod_build_push_deploy:
+    jobs:
+      - build-and-push:
+          repo-name: $AWS_ECR_REPO_NAME
+          filters:
+            branches:
+              only: <<pipeline.parameters.prod-branch>>
+      - selective-deploy-service:
+          requires:
+            - build-and-push
+          filters:
+            branches:
+              only: <<pipeline.parameters.prod-branch>>
+      - switch-to-live-now:
+          type: approval
+          requires:
+            - selective-deploy-service
+      - toggle-target-groups:
+          requires:
+            - switch-to-live-now
+          filters:
+            branches:
+              only: <<pipeline.parameters.prod-branch>>
