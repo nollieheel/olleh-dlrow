@@ -6,7 +6,7 @@ parameters:
     default: "disabled"
   qa-branch:
     type: string
-    default: "kotlin-docker"
+    default: "disabled"
 
 orbs:
   aws-cli: circleci/aws-cli@2.1.0
@@ -95,11 +95,10 @@ commands:
     steps:
       - run:
           name: "Toggle target group associations"
-          # TODO debug echoes
           command: |
-            echo aws elbv2 modify-rule --rule-arn ${AWS_RULE_ARN_PRELIVE} --actions Type=forward,TargetGroupArn=${AWS_TGROUP_ARN_BRIDGE}
-            echo aws elbv2 modify-rule --rule-arn ${AWS_RULE_ARN_LIVE} --actions Type=forward,TargetGroupArn=<<parameters.new-live-tgroup>>
-            echo aws elbv2 modify-rule --rule-arn ${AWS_RULE_ARN_PRELIVE} --actions Type=forward,TargetGroupArn=<<parameters.new-prelive-tgroup>>
+            aws elbv2 modify-rule --rule-arn ${AWS_RULE_ARN_PRELIVE} --actions Type=forward,TargetGroupArn=${AWS_TGROUP_ARN_BRIDGE}
+            aws elbv2 modify-rule --rule-arn ${AWS_RULE_ARN_LIVE} --actions Type=forward,TargetGroupArn=<<parameters.new-live-tgroup>>
+            aws elbv2 modify-rule --rule-arn ${AWS_RULE_ARN_PRELIVE} --actions Type=forward,TargetGroupArn=<<parameters.new-prelive-tgroup>>
 
 jobs:
 
@@ -116,13 +115,11 @@ jobs:
           repo-name: <<parameters.repo-name>>
           output: cc_new_img_tag
       - run: echo "export CC_NEW_IMG_TAG=$(cat cc_new_img_tag)" >> $BASH_ENV
-      #- aws-ecr/build-and-push-image:
-      #    setup-remote-docker: true
-      #    remote-docker-layer-caching: true
-      #    repo: <<parameters.repo-name>>
-      #    tag: ${CC_NEW_IMG_TAG},latest
-      # TODO debug
-      - run: cat cc_new_img_tag
+      - aws-ecr/build-and-push-image:
+          setup-remote-docker: true
+          remote-docker-layer-caching: true
+          repo: <<parameters.repo-name>>
+          tag: ${CC_NEW_IMG_TAG},latest
       - persist_to_workspace:
           root: .
           paths:
@@ -135,8 +132,6 @@ jobs:
       - setup-awscli
       - get-prelive-target-group:
           output: cc_prelive_tgroup
-      # TODO debug
-      - run: cat cc_prelive_tgroup
       - persist_to_workspace:
           root: .
           paths:
@@ -184,21 +179,14 @@ jobs:
           steps:
             - get-deploy-variables:
                 prelive-tgroup-file: cc_prelive_tgroup
-      # TODO debug
-      - run: |
-          echo cluster-name: $AWS_ECS_CLUSTER_NAME
-          echo service-name: $CC_NEW_ECS_SERVICE
-          echo family: <<parameters.family>>
-          echo container-image-name-updates: "container=<<parameters.container-name>>,tag=${CC_NEW_IMG_TAG}"
-          echo container-env-updates: "container=<<parameters.container-name>>,name=APP_GIT_REFERENCE,value=${CIRCLE_SHA1}${CC_STR_VARS}"
-      #- aws-ecs/update-service:
-      #    cluster-name: $AWS_ECS_CLUSTER_NAME
-      #    service-name: $CC_NEW_ECS_SERVICE
-      #    family: <<parameters.family>>
-      #    container-image-name-updates: "container=<<parameters.container-name>>,tag=${CC_NEW_IMG_TAG}"
-      #    container-env-var-updates: "container=<<parameters.container-name>>,name=APP_GIT_REFERENCE,value=${CIRCLE_SHA1}${CC_STR_VARS}"
-      #    task-definition-tags: 'key=CreatedBy,value=CircleCI'
-      #    verify-revision-is-deployed: true
+      - aws-ecs/update-service:
+          cluster-name: $AWS_ECS_CLUSTER_NAME
+          service-name: $CC_NEW_ECS_SERVICE
+          family: <<parameters.family>>
+          container-image-name-updates: "container=<<parameters.container-name>>,tag=${CC_NEW_IMG_TAG}"
+          container-env-var-updates: "container=<<parameters.container-name>>,name=APP_GIT_REFERENCE,value=${CIRCLE_SHA1}${CC_STR_VARS}"
+          task-definition-tags: 'key=CreatedBy,value=CircleCI'
+          verify-revision-is-deployed: true
 
   toggle-target-groups:
     docker:
