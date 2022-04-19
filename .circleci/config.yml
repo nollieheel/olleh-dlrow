@@ -3,10 +3,10 @@ version: 2.1
 parameters:
   prod-branch:
     type: string
-    default: "kotlin-docker"
+    default: "disabled"
   qa-branch:
     type: string
-    default: "disabled"
+    default: "kotlin-docker"
 
 orbs:
   aws-cli: circleci/aws-cli@2.1.0
