@@ -6,7 +6,7 @@ parameters:
     default: "kotlin-docker"
   qa-branch:
     type: string
-    default: "kotlin-docker"
+    default: "disabled"
 
 orbs:
   aws-cli: circleci/aws-cli@2.1.0
@@ -28,47 +28,55 @@ commands:
     parameters:
       repo-name:
         type: string
+      output:
+        type: string
     steps:
       - run:
-          name: "Get latest number tag from repo"
+          name: "Get latest number tag from repo and increment it"
           command: |
             res=$(aws ecr describe-images --repository-name <<parameters.repo-name>> --image-ids imageTag=latest || echo empty)
+
             if [[ "$res" == "empty" ]]; then
-              tag=0
+              tag_cur=0
             else
-              tag=$(echo $res | jq -r '.imageDetails[0].imageTags | map(select(. != "latest"))[0]')
+              tag_cur=$(echo $res | jq -r '.imageDetails[0].imageTags | map(select(. != "latest"))[0]')
             fi
+            tag_new=$((tag_cur + 1))
 
-            echo Latest image tag is ${tag}
-            echo "export CONF_LATEST_IMG_TAG=${tag}" >> $BASH_ENV
+            echo New latest image tag will be ${tag_new}
+            echo $tag_new > <<parameters.output>>
 
-  increment-latest-tag:
-    description: "Increment CONF_LATEST_IMG_TAG env var"
+  get-prelive-target-group:
+    description: "Get target group designation from prelive ALB listener rule"
+    parameters:
+      output:
+        type: string
     steps:
       - run:
-          name: "Increment latest image tag"
+          name: "Get target group from prelive listener"
           command: |
-            tag=$((CONF_LATEST_IMG_TAG + 1))
-            echo New image tag will be ${tag}
-            echo "export CONF_NEW_IMG_TAG=${tag}" >> $BASH_ENV
+            aws elbv2 describe-rules --rule-arns ${AWS_RULE_ARN_PRELIVE} | jq -r '.Rules[0].Actions[0].TargetGroupArn' > <<parameters.output>>
 
   get-deploy-variables:
     description: "Generate variables for selective deploy"
+    parameters:
+      prelive-tgroup-file:
+        type: string
     steps:
       - run:
           name: "Generate deploy variables"
           command: |
-            tgroup_old=$(aws elbv2 describe-rules --rule-arns ${AWS_RULE_ARN_PRELIVE} | jq -r '.Rules[0].Actions[0].TargetGroupArn')
+            tgroup_prelive=$(cat <<parameters.prelive-tgroup-file>>)
 
-            if [[ "$tgroup_old" == "$AWS_TGROUP_ARN_1" ]]; then
-              echo "export CONF_ECS_SERVICE=${AWS_ECS_SERVICE_1}" >> $BASH_ENV
-              echo "export CONF_LIVE_TGROUP=${AWS_TGROUP_ARN_1}" >> $BASH_ENV
-              echo "export CONF_PRELIVE_TGROUP=${AWS_TGROUP_ARN_2}" >> $BASH_ENV
+            if [[ "$tgroup_prelive" == "$AWS_TGROUP_ARN_1" ]]; then
+              echo "export CC_NEW_ECS_SERVICE=${AWS_ECS_SERVICE_1}" >> $BASH_ENV
+              echo "export CC_NEW_LIVE_TGROUP=${AWS_TGROUP_ARN_1}" >> $BASH_ENV
+              echo "export CC_NEW_PRELIVE_TGROUP=${AWS_TGROUP_ARN_2}" >> $BASH_ENV
               tgroup_old_num=1
             elif [[ "$tgroup_old" == "$AWS_TGROUP_ARN_2" ]]; then
-              echo "export CONF_ECS_SERVICE=${AWS_ECS_SERVICE_2}" >> $BASH_ENV
-              echo "export CONF_LIVE_TGROUP=${AWS_TGROUP_ARN_2}" >> $BASH_ENV
-              echo "export CONF_PRELIVE_TGROUP=${AWS_TGROUP_ARN_1}" >> $BASH_ENV
+              echo "export CC_NEW_ECS_SERVICE=${AWS_ECS_SERVICE_2}" >> $BASH_ENV
+              echo "export CC_NEW_LIVE_TGROUP=${AWS_TGROUP_ARN_2}" >> $BASH_ENV
+              echo "export CC_NEW_PRELIVE_TGROUP=${AWS_TGROUP_ARN_1}" >> $BASH_ENV
               tgroup_old_num=2
             else
               >&2 echo "Pre-live ALB listener rule is currently not associated with either target groups"
@@ -77,117 +85,177 @@ commands:
 
             echo Deploy to service designation ${tgroup_old_num}
 
+  switch-live-prelive:
+    description: "Switch live and prelive ALB target groups"
+    parameters:
+      new-live-tgroup:
+        type: string
+      new-prelive-tgroup:
+        type: string
+    steps:
+      - run:
+          name: "Toggle target group associations"
+          # TODO debug echoes
+          command: |
+            echo aws elbv2 modify-rule --rule-arn ${AWS_RULE_ARN_PRELIVE} --actions Type=forward,TargetGroupArn=${AWS_TGROUP_ARN_BRIDGE}
+            echo aws elbv2 modify-rule --rule-arn ${AWS_RULE_ARN_LIVE} --actions Type=forward,TargetGroupArn=<<parameters.new-live-tgroup>>
+            echo aws elbv2 modify-rule --rule-arn ${AWS_RULE_ARN_PRELIVE} --actions Type=forward,TargetGroupArn=<<parameters.new-prelive-tgroup>>
+
 jobs:
 
   build-and-push:
     parameters:
       repo-name:
         type: string
+        default: $AWS_ECR_REPO_NAME
     docker:
       - image: cimg/python:3.9
     steps:
       - setup-awscli
       - get-latest-image-tag:
           repo-name: <<parameters.repo-name>>
-      - increment-latest-tag
-      - aws-ecr/build-and-push-image:
-          setup-remote-docker: true
-          remote-docker-layer-caching: true
-          repo: <<parameters.repo-name>>
-          tag: ${CONF_NEW_IMG_TAG},latest
+          output: cc_new_img_tag
+      - run: echo "export CC_NEW_IMG_TAG=$(cat cc_new_img_tag)" >> $BASH_ENV
+      #- aws-ecr/build-and-push-image:
+      #    setup-remote-docker: true
+      #    remote-docker-layer-caching: true
+      #    repo: <<parameters.repo-name>>
+      #    tag: ${CC_NEW_IMG_TAG},latest
+      # TODO debug
+      - run: cat cc_new_img_tag
+      - persist_to_workspace:
+          root: .
+          paths:
+            - cc_new_img_tag
 
-  simple-deploy-service:
+  get-prelive-tgroup:
+    docker:
+      - image: cimg/python:3.9
+    steps:
+      - setup-awscli
+      - get-prelive-target-group:
+          output: cc_prelive_tgroup
+      # TODO debug
+      - run: cat cc_prelive_tgroup
+      - persist_to_workspace:
+          root: .
+          paths:
+            - cc_prelive_tgroup
+
+  deploy-service:
     parameters:
-      repo-name:
+      is-qa:
+        type: boolean
+        default: false
+      env-vars-prefix:
         type: string
-      service-name:
-        type: string
-      container-name:
-        type: string
+        default: APP_PROD_
       family:
         type: string
+        default: $AWS_TASK_DEF_FAMILY
+      container-name:
+        type: string
+        default: $AWS_TASK_DEF_CONTAINER
     docker:
       - image: cimg/python:3.9
     steps:
       - setup-awscli
-      - get-latest-image-tag:
-          repo-name: <<parameters.repo-name>>
-      - aws-ecs/update-service:
-          cluster-name: $AWS_ECS_CLUSTER_NAME
-          service-name: <<parameters.service-name>>
-          family: <<parameters.family>>
-          container-image-name-updates: "container=<<parameters.container-name>>,tag=${CONF_LATEST_IMG_TAG}"
-          container-env-var-updates: "container=<<parameters.container-name>>,name=APP_GIT_REFERENCE,value=${CIRCLE_SHA1}"
-          task-definition-tags: 'key=CreatedBy,value=CircleCI'
-          verify-revision-is-deployed: true
+      - attach_workspace:
+          at: ./
+      - run:
+          name: "Put new image tag in bash env"
+          command: echo "export CC_NEW_IMG_TAG=$(cat cc_new_img_tag)" >> $BASH_ENV
+      - run:
+          name: "Create app env var string for task definition"
+          command: |
+            export | grep <<parameters.env-vars-prefix>> | sed 's/^declare -x <<parameters.env-vars-prefix>>//' > app_env
 
-  selective-deploy-service:
-    docker:
-      - image: cimg/python:3.9
-    steps:
-      - setup-awscli
-      - get-latest-image-tag:
-          repo-name: $AWS_ECR_REPO_NAME
-      - get-deploy-variables
-      - aws-ecs/update-service:
-          cluster-name: $AWS_ECS_CLUSTER_NAME
-          service-name: $CONF_ECS_SERVICE
-          family: $AWS_TASK_DEF_FAMILY
-          container-image-name-updates: 'container=${AWS_TASK_DEF_CONTAINER},tag=${CONF_LATEST_IMG_TAG}'
-          container-env-var-updates: "container=${AWS_TASK_DEF_CONTAINER},name=APP_GIT_REFERENCE,value=${CIRCLE_SHA1}"
-          task-definition-tags: 'key=CreatedBy,value=CircleCI'
-          verify-revision-is-deployed: true
+            str=''
+            while IFS='=' read -r name value; do
+              str="${str},container=<<parameters.container-name>>,name=${name},value=${value}"
+            done < app_env
+
+            echo "export CC_STR_VARS=$(echo $str)" >> $BASH_ENV
+      - run:
+          name: "Set default service name for QA"
+          command: echo "export CC_NEW_ECS_SERVICE=${AWS_ECS_QA_SERVICE}" >> $BASH_ENV
+      - unless:
+          condition: <<parameters.is-qa>>
+          steps:
+            - get-deploy-variables:
+                prelive-tgroup-file: cc_prelive_tgroup
+      # TODO debug
+      - run: |
+          echo cluster-name: $AWS_ECS_CLUSTER_NAME
+          echo service-name: $CC_NEW_ECS_SERVICE
+          echo family: <<parameters.family>>
+          echo container-image-name-updates: "container=<<parameters.container-name>>,tag=${CC_NEW_IMG_TAG}"
+          echo container-env-updates: "container=<<parameters.container-name>>,name=APP_GIT_REFERENCE,value=${CIRCLE_SHA1}${CC_STR_VARS}"
+      #- aws-ecs/update-service:
+      #    cluster-name: $AWS_ECS_CLUSTER_NAME
+      #    service-name: $CC_NEW_ECS_SERVICE
+      #    family: <<parameters.family>>
+      #    container-image-name-updates: "container=<<parameters.container-name>>,tag=${CC_NEW_IMG_TAG}"
+      #    container-env-var-updates: "container=<<parameters.container-name>>,name=APP_GIT_REFERENCE,value=${CIRCLE_SHA1}${CC_STR_VARS}"
+      #    task-definition-tags: 'key=CreatedBy,value=CircleCI'
+      #    verify-revision-is-deployed: true
 
   toggle-target-groups:
     docker:
       - image: cimg/python:3.9
     steps:
       - setup-awscli
-      - get-deploy-variables
-      - run:
-          name: "Toggle target group associations"
-          command: |
-            aws elbv2 modify-rule --rule-arn ${AWS_RULE_ARN_PRELIVE} --actions Type=forward,TargetGroupArn=${AWS_TGROUP_ARN_BRIDGE}
-            aws elbv2 modify-rule --rule-arn ${AWS_RULE_ARN_LIVE} --actions Type=forward,TargetGroupArn=${CONF_LIVE_TGROUP}
-            aws elbv2 modify-rule --rule-arn ${AWS_RULE_ARN_PRELIVE} --actions Type=forward,TargetGroupArn=${CONF_PRELIVE_TGROUP}
+      - attach_workspace:
+          at: ./
+      - get-deploy-variables:
+          prelive-tgroup-file: cc_prelive_tgroup
+      - switch-live-prelive:
+          new-live-tgroup: $CC_NEW_LIVE_TGROUP
+          new-prelive-tgroup: $CC_NEW_PRELIVE_TGROUP
 
 workflows:
 
-  qa_build_push_deploy:
+  build_push_deploy:
     jobs:
       - build-and-push:
+          name: build-and-push-prod
+          filters:
+            branches:
+              only: <<pipeline.parameters.prod-branch>>
+      - build-and-push:
+          name: build-and-push-qa
           repo-name: $AWS_ECR_QA_REPO_NAME
           filters:
             branches:
               only: <<pipeline.parameters.qa-branch>>
-      - simple-deploy-service:
-          repo-name: $AWS_ECR_QA_REPO_NAME
-          service-name: $AWS_ECS_QA_SERVICE
-          container-name: $AWS_TASK_DEF_QA_CONTAINER
+      - get-prelive-tgroup:
+          requires:
+            - build-and-push-prod
+          filters:
+            branches:
+              only: <<pipeline.parameters.prod-branch>>
+      - deploy-service:
+          name: deploy-service-prod
+          requires:
+            - get-prelive-tgroup
+          filters:
+            branches:
+              only: <<pipeline.parameters.prod-branch>>
+      - deploy-service:
+          name: deploy-service-qa
+          is-qa: true
+          env-vars-prefix: APP_QA_
           family: $AWS_TASK_DEF_QA_FAMILY
+          container-name: $AWS_TASK_DEF_QA_CONTAINER
           requires:
-            - build-and-push
+            - build-and-push-qa
           filters:
             branches:
               only: <<pipeline.parameters.qa-branch>>
-
-  prod_build_push_deploy:
-    jobs:
-      - build-and-push:
-          repo-name: $AWS_ECR_REPO_NAME
-          filters:
-            branches:
-              only: <<pipeline.parameters.prod-branch>>
-      - selective-deploy-service:
-          requires:
-            - build-and-push
-          filters:
-            branches:
-              only: <<pipeline.parameters.prod-branch>>
       - switch-to-live-now:
           type: approval
           requires:
-            - selective-deploy-service
+            - deploy-service-prod
       - toggle-target-groups:
           requires:
             - switch-to-live-now
