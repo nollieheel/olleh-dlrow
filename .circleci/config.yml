@@ -3,7 +3,7 @@ version: 2.1
 parameters:
   prod-branch:
     type: string
-    default: "disabled"
+    default: "kotlin-docker"
   qa-branch:
     type: string
     default: "disabled"
@@ -115,15 +115,24 @@ jobs:
           repo-name: <<parameters.repo-name>>
           output: cc_new_img_tag
       - run: echo "export CC_NEW_IMG_TAG=$(cat cc_new_img_tag)" >> $BASH_ENV
-      - aws-ecr/build-and-push-image:
-          setup-remote-docker: true
-          remote-docker-layer-caching: true
-          repo: <<parameters.repo-name>>
-          tag: ${CC_NEW_IMG_TAG},latest
+      #- aws-ecr/build-and-push-image:
+      #    setup-remote-docker: true
+      #    remote-docker-layer-caching: true
+      #    repo: <<parameters.repo-name>>
+      #    tag: ${CC_NEW_IMG_TAG},latest
       - persist_to_workspace:
           root: .
           paths:
             - cc_new_img_tag
+      - run: rm cc_new_img_tag
+
+  test:
+    docker:
+      - image: cimg/python:3.9
+    steps:
+      - attach_workspace:
+          at: ./
+      - run: cat cc_new_img_tag
 
   get-prelive-tgroup:
     docker:
@@ -216,7 +225,8 @@ workflows:
           filters:
             branches:
               only: <<pipeline.parameters.qa-branch>>
-      - get-prelive-tgroup:
+      - test:
+      #- get-prelive-tgroup:
           requires:
             - build-and-push-prod
           filters:
@@ -228,7 +238,8 @@ workflows:
             - get-prelive-tgroup
           filters:
             branches:
-              only: <<pipeline.parameters.prod-branch>>
+              #only: <<pipeline.parameters.prod-branch>>
+              only: disabled
       - deploy-service:
           name: deploy-service-qa
           is-qa: true
@@ -249,4 +260,5 @@ workflows:
             - switch-to-live-now
           filters:
             branches:
-              only: <<pipeline.parameters.prod-branch>>
+              #only: <<pipeline.parameters.prod-branch>>
+              only: disabled
