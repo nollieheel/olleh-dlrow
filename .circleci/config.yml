@@ -3,7 +3,7 @@ version: 2.1
 parameters:
   prod-branch:
     type: string
-    default: "kotlin-docker"
+    default: "disabled"
   qa-branch:
     type: string
     default: "disabled"
@@ -115,25 +115,16 @@ jobs:
           repo-name: <<parameters.repo-name>>
           output: cc_new_img_tag
       - run: echo "export CC_NEW_IMG_TAG=$(cat cc_new_img_tag)" >> $BASH_ENV
-      #- aws-ecr/build-and-push-image:
-      #    setup-remote-docker: true
-      #    remote-docker-layer-caching: true
-      #    repo: <<parameters.repo-name>>
-      #    tag: ${CC_NEW_IMG_TAG},latest
       - persist_to_workspace:
           root: .
           paths:
             - cc_new_img_tag
       - run: rm cc_new_img_tag
-      - run: echo "$CC_NEW_IMG_TAG"
-
-  test:
-    docker:
-      - image: cimg/python:3.9
-    steps:
-      - attach_workspace:
-          at: ./
-      - run: cat cc_new_img_tag
+      - aws-ecr/build-and-push-image:
+          setup-remote-docker: true
+          remote-docker-layer-caching: true
+          repo: <<parameters.repo-name>>
+          tag: ${CC_NEW_IMG_TAG},latest
 
   get-prelive-tgroup:
     docker:
@@ -226,27 +217,19 @@ workflows:
           filters:
             branches:
               only: <<pipeline.parameters.qa-branch>>
-      - test:
-          requires:
-            - build-and-push-prod
-          filters:
-            branches:
-              only: <<pipeline.parameters.prod-branch>>
       - get-prelive-tgroup:
           requires:
             - build-and-push-prod
           filters:
             branches:
-              #only: <<pipeline.parameters.prod-branch>>
-              only: disabled
+              only: <<pipeline.parameters.prod-branch>>
       - deploy-service:
           name: deploy-service-prod
           requires:
             - get-prelive-tgroup
           filters:
             branches:
-              #only: <<pipeline.parameters.prod-branch>>
-              only: disabled
+              only: <<pipeline.parameters.prod-branch>>
       - deploy-service:
           name: deploy-service-qa
           is-qa: true
@@ -267,5 +250,4 @@ workflows:
             - switch-to-live-now
           filters:
             branches:
-              #only: <<pipeline.parameters.prod-branch>>
-              only: disabled
+              only: <<pipeline.parameters.prod-branch>>
