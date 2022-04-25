@@ -125,6 +125,7 @@ jobs:
           paths:
             - cc_new_img_tag
       - run: rm cc_new_img_tag
+      - run: echo "$CC_NEW_IMG_TAG"
 
   test:
     docker:
