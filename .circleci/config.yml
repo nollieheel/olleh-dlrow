@@ -226,12 +226,18 @@ workflows:
             branches:
               only: <<pipeline.parameters.qa-branch>>
       - test:
-      #- get-prelive-tgroup:
           requires:
             - build-and-push-prod
           filters:
             branches:
               only: <<pipeline.parameters.prod-branch>>
+      - get-prelive-tgroup:
+          requires:
+            - build-and-push-prod
+          filters:
+            branches:
+              #only: <<pipeline.parameters.prod-branch>>
+              only: disabled
       - deploy-service:
           name: deploy-service-prod
           requires:
