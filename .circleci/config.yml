@@ -73,7 +73,7 @@ commands:
               echo "export CC_NEW_LIVE_TGROUP=${AWS_TGROUP_ARN_1}" >> $BASH_ENV
               echo "export CC_NEW_PRELIVE_TGROUP=${AWS_TGROUP_ARN_2}" >> $BASH_ENV
               tgroup_old_num=1
-            elif [[ "$tgroup_old" == "$AWS_TGROUP_ARN_2" ]]; then
+            elif [[ "$tgroup_prelive" == "$AWS_TGROUP_ARN_2" ]]; then
               echo "export CC_NEW_ECS_SERVICE=${AWS_ECS_SERVICE_2}" >> $BASH_ENV
               echo "export CC_NEW_LIVE_TGROUP=${AWS_TGROUP_ARN_2}" >> $BASH_ENV
               echo "export CC_NEW_PRELIVE_TGROUP=${AWS_TGROUP_ARN_1}" >> $BASH_ENV
